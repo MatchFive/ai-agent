@@ -89,6 +89,7 @@
 - [x] 实现用户管理
 
 ### Phase 5: 服务管理
+- [x] 环境初始化脚本 init_env.sh
 - [x] 启动脚本 start_server.sh
 - [x] 停止脚本 stop_server.sh
 
@@ -147,28 +148,61 @@
 #### 服务脚本
 | 文件路径 | 说明 |
 |----------|------|
+| `init_env.sh` | 环境初始化脚本 |
 | `start_server.sh` | 服务启动脚本 |
 | `stop_server.sh` | 服务停止脚本 |
 
 ---
 
-## 四、启动说明
+## 四、使用说明
 
-### 方式一：使用脚本（推荐）
+### 快速开始
 
 ```bash
-# 启动所有服务
+# 1. 添加执行权限
+chmod +x init_env.sh start_server.sh stop_server.sh
+
+# 2. 检查环境依赖
+./init_env.sh check
+
+# 3. 初始化所有环境
+./init_env.sh all
+
+# 4. 编辑配置文件
+vim .env
+
+# 5. 启动服务
 ./start_server.sh
+```
 
-# 启动指定服务
-./start_server.sh backend   # 仅后端
-./start_server.sh user      # 仅用户端
-./start_server.sh admin     # 仅管理端
+### 环境初始化脚本
 
-# 停止所有服务
-./stop_server.sh
+```bash
+# 初始化所有环境
+./init_env.sh all
 
-# 停止指定服务
+# 初始化指定环境
+./init_env.sh backend   # 后端Python环境
+./init_env.sh frontend  # 前端环境
+./init_env.sh user      # 仅用户端前端
+./init_env.sh admin     # 仅管理端前端
+./init_env.sh db        # MySQL数据库
+
+# 检查环境依赖
+./init_env.sh check
+```
+
+### 服务管理脚本
+
+```bash
+# 启动服务
+./start_server.sh          # 启动所有服务
+./start_server.sh backend  # 仅后端
+./start_server.sh user     # 仅用户端
+./start_server.sh admin    # 仅管理端
+
+# 停止服务
+./stop_server.sh           # 停止所有服务
 ./stop_server.sh backend
 ./stop_server.sh user
 ./stop_server.sh admin
@@ -177,40 +211,18 @@
 ./stop_server.sh status
 ```
 
-### 方式二：手动启动
-
-#### 启动后端
-```bash
-cd ai-agent
-pip install -r requirements.txt
-python -m uvicorn api.main:app --reload --port 8000
-```
-
-#### 启动用户端
-```bash
-cd frontend/user
-npm install
-npm run dev  # http://localhost:3000
-```
-
-#### 启动管理端
-```bash
-cd frontend/admin
-npm install
-npm run dev  # http://localhost:3001
-```
-
-### 默认管理员
-- 用户名: `admin`
-- 密码: `123456`
-
 ### 服务地址
+
 | 服务 | 地址 |
 |------|------|
 | 后端API | http://localhost:8000 |
 | API文档 | http://localhost:8000/docs |
 | 用户端 | http://localhost:3000 |
 | 管理端 | http://localhost:3001 |
+
+### 默认管理员
+- 用户名: `admin`
+- 密码: `123456`
 
 ---
 
