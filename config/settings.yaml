@@ -1,0 +1,38 @@
+# AI-Agent 配置文件
+# 应用配置
+app_name: "AI-Agent"
+debug: false
+log_level: "INFO"
+secret_key: "your-secret-key-change-in-production"
+
+# LLM配置
+llm:
+  provider: "anthropic"
+  model: "claude-sonnet-4-6"
+  api_key: "${ANTHROPIC_API_KEY}"
+  max_tokens: 4096
+  temperature: 0.7
+
+# 邮件配置
+email:
+  smtp_host: "smtp.example.com"
+  smtp_port: 587
+  username: "${EMAIL_USERNAME}"
+  password: "${EMAIL_PASSWORD}"
+  from_addr: "${EMAIL_FROM}"
+  use_tls: true
+
+# 调度器配置
+scheduler:
+  backend: "memory"  # memory 或 redis
+  redis_url: "${REDIS_URL}"
+
+# MySQL数据库配置
+database:
+  host: "localhost"
+  port: 3306
+  user: "root"
+  password: "${DB_PASSWORD}"
+  database: "ai_agent"
+  charset: "utf8mb4"
+  echo: false

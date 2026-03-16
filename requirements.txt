@@ -1,0 +1,41 @@
+# AI Agent Multi-Agent Framework
+# Dependencies
+
+# LLM
+anthropic>=0.40.0
+
+# Configuration
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+pyyaml>=6.0
+
+# Scheduler
+apscheduler>=3.10.0
+
+# HTTP Client
+httpx>=0.27.0
+
+# Database
+sqlalchemy>=2.0.0
+pymysql>=1.1.0
+aiomysql>=0.2.0
+
+# Logging
+loguru>=0.7.0
+
+# Async
+asyncio-throttle>=1.0
+
+# Utils
+python-dotenv>=1.0.0
+rich>=13.0.0
+
+# FastAPI
+fastapi>=0.110.0
+uvicorn>=0.27.0
+python-multipart>=0.0.9
+
+# Auth
+passlib>=1.7.4
+bcrypt>=4.1.0
+pyjwt>=2.8.0
