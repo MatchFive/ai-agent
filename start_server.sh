@@ -11,6 +11,18 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# 获取服务器公网IP
+get_public_ip() {
+    local ip=""
+    ip=$(curl -s ifconfig.me 2>/dev/null) || \
+    ip=$(curl -s icanhazip.com 2>/dev/null) || \
+    ip=$(curl -s ipecho.net/plain 2>/dev/null) || \
+    ip="YOUR_SERVER_IP"
+    echo "$ip"
+}
+
+PUBLIC_IP=$(get_public_ip)
+
 # 项目根目录
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_DIR="$PROJECT_DIR/logs"
@@ -68,7 +80,7 @@ start_backend() {
         return 1
     fi
 
-    # 启动后端服务
+    # 启动后端服务 - 绑定到所有网络接口
     nohup python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 >> "$log_file" 2>&1 &
     local pid=$!
     echo $pid > "$pid_file"
@@ -77,8 +89,9 @@ start_backend() {
 
     if is_running "$pid_file"; then
         echo -e "${GREEN}[后端] 启动成功 (PID: $pid)${NC}"
-        echo -e "${GREEN}[后端] 地址: http://localhost:8000${NC}"
-        echo -e "${GREEN}[后端] API文档: http://localhost:8000/docs${NC}"
+        echo -e "${GREEN}[后端] 本地地址: http://localhost:8000${NC}"
+        echo -e "${GREEN}[后端] 公网地址: http://${PUBLIC_IP}:8000${NC}"
+        echo -e "${GREEN}[后端] API文档: http://${PUBLIC_IP}:8000/docs${NC}"
     else
         echo -e "${RED}[后端] 启动失败，请查看日志: $log_file${NC}"
         return 1
@@ -114,7 +127,8 @@ start_user_frontend() {
 
     if is_running "$pid_file"; then
         echo -e "${GREEN}[用户端] 启动成功 (PID: $pid)${NC}"
-        echo -e "${GREEN}[用户端] 地址: http://localhost:3000${NC}"
+        echo -e "${GREEN}[用户端] 本地地址: http://localhost:3000${NC}"
+        echo -e "${GREEN}[用户端] 公网地址: http://${PUBLIC_IP}:3000${NC}"
     else
         echo -e "${RED}[用户端] 启动失败，请查看日志: $log_file${NC}"
         return 1
@@ -150,7 +164,8 @@ start_admin_frontend() {
 
     if is_running "$pid_file"; then
         echo -e "${GREEN}[管理端] 启动成功 (PID: $pid)${NC}"
-        echo -e "${GREEN}[管理端] 地址: http://localhost:3001${NC}"
+        echo -e "${GREEN}[管理端] 本地地址: http://localhost:3001${NC}"
+        echo -e "${GREEN}[管理端] 公网地址: http://${PUBLIC_IP}:3001${NC}"
     else
         echo -e "${RED}[管理端] 启动失败，请查看日志: $log_file${NC}"
         return 1
@@ -189,13 +204,14 @@ main() {
 
     echo ""
     echo -e "${GREEN}================================${NC}"
-    echo -e "${GREEN}服务状态:${NC}"
-    echo -e "  后端API:  http://localhost:8000"
-    echo -e "  API文档:  http://localhost:8000/docs"
-    echo -e "  用户端:   http://localhost:3000"
-    echo -e "  管理端:   http://localhost:3001"
+    echo -e "${GREEN}服务地址:${NC}"
+    echo -e "  后端API:  http://${PUBLIC_IP}:8000"
+    echo -e "  API文档:  http://${PUBLIC_IP}:8000/docs"
+    echo -e "  用户端:   http://${PUBLIC_IP}:3000"
+    echo -e "  管理端:   http://${PUBLIC_IP}:3001"
     echo -e "${GREEN}================================${NC}"
     echo ""
+    echo -e "${YELLOW}提示: 请确保服务器防火墙已开放 8000, 3000, 3001 端口${NC}"
     echo -e "默认管理员: admin / 123456"
     echo ""
 }
