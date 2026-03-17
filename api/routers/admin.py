@@ -100,7 +100,8 @@ async def create_invite_codes(
     for _ in range(data.count):
         code = InviteCode(
             code=generate_invite_code(),
-            created_by=current_admin.id
+            created_by=current_admin.id,
+            is_used=False
         )
         session.add(code)
         codes.append(code)

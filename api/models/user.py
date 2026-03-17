@@ -1,14 +1,15 @@
 """
 用户数据模型
-使用MySQL数据库 + pymysql连接库
+使用MySQL数据库 + aiomysql异步驱动
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
-from sqlalchemy.orm import relationship
+from typing import AsyncGenerator
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, select
 from sqlalchemy.pool import QueuePool
 
 from core.config import settings
+from core.logger import logger
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 
@@ -24,12 +25,8 @@ class User(Base):
     username = Column(String(50), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), default="user", nullable=False)  # admin / user
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-    # 关联
-    invite_codes = relationship("InviteCode", back_populates="creator", foreign_keys="InviteCode.created_by")
-    used_codes = relationship("InviteCode", back_populates="user", foreign_keys="InviteCode.used_by")
 
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', role='{self.role}')>"
@@ -41,80 +38,94 @@ class InviteCode(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String(32), unique=True, index=True, nullable=False)
-    is_used = Column(Boolean, default=False)
+    is_used = Column(Boolean, default=False, nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     used_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     used_at = Column(DateTime, nullable=True)
 
-    # 关联
-    creator = relationship("User", back_populates="invite_codes", foreign_keys=[created_by])
-    user = relationship("User", back_populates="used_codes", foreign_keys=[used_by])
-
     def __repr__(self):
         return f"<InviteCode(id={self.id}, code='{self.code}', is_used={self.is_used})>"
 
 
-# 数据库引擎和会话
-engine = None
-async_session_maker = None
+# 数据库引擎和会话工厂
+_engine = None
+_async_session_factory = None
 
 
 async def init_db():
-    """初始化数据库"""
-    global engine, async_session_maker
+    """初始化数据库连接"""
+    global _engine, _async_session_factory
 
-    # MySQL连接配置
-    # 使用 aiomysql 作为异步驱动
-    db_url = settings.database.url
+    if _engine is not None:
+        return
 
-    # 如果URL以mysql://开头，转换为mysql+aiomysql://
-    if db_url.startswith("mysql://"):
-        db_url = db_url.replace("mysql://", "mysql+aiomysql://")
-    elif db_url.startswith("mysql+pymysql://"):
-        db_url = db_url.replace("mysql+pymysql://", "mysql+aiomysql://")
+    # 获取数据库URL
+    db_url = settings.get_db_url()
+    logger.info("Connecting to database...")
 
-    engine = create_async_engine(
+    # 创建异步引擎
+    _engine = create_async_engine(
         db_url,
-        echo=settings.database.echo,
+        echo=settings.db_echo,
         poolclass=QueuePool,
-        pool_size=10,           # 连接池大小
-        max_overflow=20,        # 最大溢出连接数
-        pool_timeout=30,        # 获取连接超时时间
-        pool_recycle=3600,      # 连接回收时间(1小时)
-        pool_pre_ping=True,     # 连接前检查可用性
+        pool_size=10,
+        max_overflow=20,
+        pool_timeout=30,
+        pool_recycle=3600,
+        pool_pre_ping=True,
     )
 
-    async_session_maker = async_sessionmaker(
-        engine,
+    # 创建会话工厂
+    _async_session_factory = async_sessionmaker(
+        _engine,
         class_=AsyncSession,
-        expire_on_commit=False
+        expire_on_commit=False,
     )
 
     # 创建表
-    async with engine.begin() as conn:
+    async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    logger.info("Database tables created")
 
     # 创建默认管理员
     await create_default_admin()
 
 
-async def get_session() -> AsyncSession:
-    """获取数据库会话"""
-    if async_session_maker is None:
+async def close_db():
+    """关闭数据库连接"""
+    global _engine
+    if _engine:
+        await _engine.dispose()
+        _engine = None
+        logger.info("Database connections closed")
+
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    """获取数据库会话（用于依赖注入）"""
+    global _async_session_factory
+
+    if _async_session_factory is None:
         await init_db()
-    return async_session_maker()
+
+    async with _async_session_factory() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
 
 
 async def create_default_admin():
     """创建默认管理员账号"""
-    from passlib.context import CryptContext
+    global _async_session_factory
 
+    from passlib.context import CryptContext
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-    async with async_session_maker() as session:
+    async with _async_session_factory() as session:
         # 检查是否已存在
-        from sqlalchemy import select
         result = await session.execute(select(User).where(User.username == "admin"))
         admin = result.scalar_one_or_none()
 
@@ -127,12 +138,4 @@ async def create_default_admin():
             )
             session.add(admin)
             await session.commit()
-            print("Default admin created: admin / 123456")
-
-
-async def close_db():
-    """关闭数据库连接"""
-    global engine
-    if engine:
-        await engine.dispose()
-        engine = None
+            logger.info("Default admin created: admin / 123456")

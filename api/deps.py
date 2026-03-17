@@ -7,8 +7,10 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import jwt
 
 from api.models.user import User, get_session
+from core.config import settings
 
 # Bearer Token 认证
 security = HTTPBearer()
@@ -19,9 +21,6 @@ async def get_current_user(
     session: AsyncSession = Depends(get_session)
 ) -> User:
     """获取当前用户"""
-    import jwt
-    from core.config import settings
-
     token = credentials.credentials
 
     try:
@@ -79,15 +78,14 @@ async def get_current_admin(
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
+        HTTPBearer(auto_error=False)
+    ),
     session: AsyncSession = Depends(get_session)
 ) -> Optional[User]:
     """获取可选的当前用户（不强制要求登录）"""
     if credentials is None:
         return None
-
-    import jwt
-    from core.config import settings
 
     token = credentials.credentials
 

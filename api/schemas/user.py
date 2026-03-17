@@ -3,8 +3,8 @@
 """
 
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, Field
+from typing import Optional, List
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ========== 用户相关 ==========
@@ -28,13 +28,12 @@ class UserLogin(BaseModel):
 
 class UserResponse(UserBase):
     """用户响应模型"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     role: str
     is_active: bool
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # ========== Token相关 ==========
@@ -62,6 +61,8 @@ class InviteCodeCreate(BaseModel):
 
 class InviteCodeResponse(BaseModel):
     """邀请码响应"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     code: str
     is_used: bool
@@ -70,11 +71,8 @@ class InviteCodeResponse(BaseModel):
     created_at: datetime
     used_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
-
 
 class InviteCodeListResponse(BaseModel):
     """邀请码列表响应"""
-    items: list[InviteCodeResponse]
+    items: List[InviteCodeResponse]
     total: int

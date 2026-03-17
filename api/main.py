@@ -17,16 +17,14 @@ async def lifespan(app: FastAPI):
     """应用生命周期"""
     # 启动时
     logger.info("Starting AI-Agent API...")
-    logger.info(f"Database: {settings.database.host}:{settings.database.port}/{settings.database.database}")
+    logger.info(f"Database: {settings.db_host}:{settings.db_port}/{settings.db_database}")
     await init_db()
-    logger.info("Database initialized")
 
     yield
 
     # 关闭时
     logger.info("Shutting down AI-Agent API...")
     await close_db()
-    logger.info("Database connections closed")
 
 
 # 创建应用
