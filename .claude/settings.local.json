@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(ls:*)",
+      "Bash(grep -r deploy/ --include=*.sh --include=*.md .)",
+      "Bash(grep -l \"deploy/\" *.sh *.md)"
     ]
   }
 }
