@@ -1,6 +1,7 @@
 logs/
 *.log
 *.pid
-
+.idea
+.claude
 # 部署配置（包含服务器敏感信息）
 deploy/
