@@ -6,7 +6,6 @@
 from datetime import datetime
 from typing import AsyncGenerator
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, select
-from sqlalchemy.pool import QueuePool
 
 from core.config import settings
 from core.logger import logger
@@ -68,7 +67,6 @@ async def init_db():
     _engine = create_async_engine(
         db_url,
         echo=settings.db_echo,
-        poolclass=QueuePool,
         pool_size=10,
         max_overflow=20,
         pool_timeout=30,
