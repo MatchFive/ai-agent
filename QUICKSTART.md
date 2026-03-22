@@ -10,7 +10,10 @@ bash quick_setup.sh
 cp .env.example .env
 vi .env
 
-# 3. 启动服务
+# 3. 初始化数据库（重要！）
+bash init_database.sh
+
+# 4. 启动服务
 ./start_server.sh all prod
 ```
 
@@ -126,8 +129,24 @@ npm run build
 
 ```bash
 # 给脚本添加执行权限
-chmod +x quick_setup.sh start_server.sh stop_server.sh build.sh
+chmod +x quick_setup.sh start_server.sh stop_server.sh build.sh init_database.sh
 ```
+
+### 5. 数据库权限错误
+
+**错误信息**: `SELECT command denied to user 'ai_agent'@'localhost'`
+
+**解决方案**:
+
+```bash
+# 运行数据库初始化脚本
+bash init_database.sh
+
+# 或手动执行
+mysql -u root -p < init_database.sql
+```
+
+详细说明请查看: `docs/DATABASE_PERMISSION_FIX.md`
 
 ## 目录结构
 

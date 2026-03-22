@@ -6,7 +6,8 @@
 
 ### 故障排除
 
-- [AIOMYSQL_ERROR_FIX.md](./AIOMYSQL_ERROR_FIX.md) - aiomysql 事件循环关闭错误的解决方案
+- [DATABASE_PERMISSION_FIX.md](./DATABASE_PERMISSION_FIX.md) - 数据库权限问题解决方案 ⭐
+- [AIOMYSQL_ERROR_FIX.md](./AIOMYSQL_ERROR_FIX.md) - aiomysql 事件循环关闭错误
 
 ### 部署相关
 
@@ -17,7 +18,18 @@
 
 ## 常见问题
 
-### 1. 后端启动时出现 Event Loop 错误
+### 1. 数据库权限错误 ⭐
+
+**症状**: `SELECT command denied to user 'ai_agent'@'localhost'`
+
+**解决**: 查看 [DATABASE_PERMISSION_FIX.md](./DATABASE_PERMISSION_FIX.md)
+
+**快速修复**:
+```bash
+bash init_database.sh
+```
+
+### 2. 后端启动时出现 Event Loop 错误
 
 **症状**: 看到 `RuntimeError: Event loop is closed` 错误
 
@@ -25,7 +37,7 @@
 
 **简答**: 这是 aiomysql + Python 3.13 的已知问题，不影响功能，可以安全忽略。
 
-### 2. 前端构建失败
+### 3. 前端构建失败
 
 **解决**:
 ```bash
@@ -35,7 +47,7 @@ npm install
 npm run build
 ```
 
-### 3. 服务无法启动
+### 4. 服务无法启动
 
 **检查步骤**:
 1. 查看日志: `tail -f logs/backend.log`
@@ -43,7 +55,7 @@ npm run build
 3. 检查依赖: `pip list | grep fastapi`
 4. 查看状态: `./stop_server.sh status`
 
-### 4. 数据库连接失败
+### 5. 数据库连接失败
 
 **检查**:
 1. 数据库是否运行
