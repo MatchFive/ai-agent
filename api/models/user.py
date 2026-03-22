@@ -93,11 +93,25 @@ async def init_db():
 
 async def close_db():
     """关闭数据库连接"""
-    global _engine
+    global _engine, _async_session_factory
+
+    # 先关闭会话工厂
+    if _async_session_factory:
+        _async_session_factory = None
+        logger.info("Database session factory closed")
+
+    # 然后关闭引擎和连接池
     if _engine:
-        await _engine.dispose()
-        _engine = None
-        logger.info("Database connections closed")
+        try:
+            # 确保所有连接都被释放
+            await _engine.dispose()
+            logger.info("Database engine disposed")
+        except Exception as e:
+            logger.warning(f"Error disposing database engine: {e}")
+        finally:
+            _engine = None
+
+    logger.info("Database connections closed")
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

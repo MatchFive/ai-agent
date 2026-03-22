@@ -121,14 +121,18 @@ start_backend() {
     fi
 
     # 启动后端服务 - 绑定到所有网络接口
-    nohup python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 \
+    # 使用 --loop uvloop 可以提高性能（如果安装了 uvloop）
+    nohup python -m uvicorn api.main:app \
+        --host 0.0.0.0 \
+        --port 8000 \
         --workers 1 \
         --log-level info \
+        --timeout-keep-alive 30 \
         >> "$log_file" 2>&1 &
     local pid=$!
     echo $pid > "$pid_file"
 
-    sleep 2
+    sleep 3
 
     if is_running "$pid_file"; then
         echo -e "${GREEN}[后端] 启动成功 (PID: $pid)${NC}"
@@ -137,7 +141,7 @@ start_backend() {
         echo -e "${GREEN}[后端] API文档: http://${PUBLIC_IP}:8000/docs${NC}"
     else
         echo -e "${RED}[后端] 启动失败，请查看日志: $log_file${NC}"
-        tail -n 20 "$log_file"
+        tail -n 30 "$log_file"
         return 1
     fi
 }
