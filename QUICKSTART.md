@@ -148,6 +148,39 @@ mysql -u root -p < init_database.sql
 
 详细说明请查看: `docs/DATABASE_PERMISSION_FIX.md`
 
+### 6. bcrypt 兼容性错误 ⭐
+
+**错误信息**:
+- `error reading bcrypt version`
+- `password cannot be longer than 72 bytes`
+
+**快速修复**:
+
+```bash
+# 运行修复脚本
+bash fix_bcrypt.sh
+
+# 重启服务
+./stop_server.sh backend
+./start_server.sh backend
+```
+
+**手动修复**:
+
+```bash
+# 激活环境
+conda activate ai_agent
+
+# 降级 bcrypt
+pip install 'bcrypt>=4.0.1,<4.1.0'
+
+# 重启服务
+./stop_server.sh backend
+./start_server.sh backend
+```
+
+详细说明请查看: `BCRYPT_FIX.md`
+
 ## 目录结构
 
 ```

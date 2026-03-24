@@ -7,6 +7,7 @@
 ### 故障排除
 
 - [DATABASE_PERMISSION_FIX.md](./DATABASE_PERMISSION_FIX.md) - 数据库权限问题解决方案 ⭐
+- [BCRYPT_COMPATIBILITY_FIX.md](./BCRYPT_COMPATIBILITY_FIX.md) - bcrypt 和 passlib 兼容性问题 ⭐
 - [AIOMYSQL_ERROR_FIX.md](./AIOMYSQL_ERROR_FIX.md) - aiomysql 事件循环关闭错误
 
 ### 部署相关
@@ -29,7 +30,20 @@
 bash init_database.sh
 ```
 
-### 2. 后端启动时出现 Event Loop 错误
+### 2. bcrypt 兼容性错误 ⭐
+
+**症状**:
+- `module 'bcrypt' has no attribute '__about__'`
+- `ValueError: password cannot be longer than 72 bytes`
+
+**解决**: 查看 [BCRYPT_COMPATIBILITY_FIX.md](./BCRYPT_COMPATIBILITY_FIX.md)
+
+**快速修复**:
+```bash
+bash fix_bcrypt.sh
+```
+
+### 3. 后端启动时出现 Event Loop 错误
 
 **症状**: 看到 `RuntimeError: Event loop is closed` 错误
 
