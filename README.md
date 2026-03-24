@@ -18,15 +18,44 @@
 ```
 ai-agent/
 ├── agents/                 # Agent模块
+│   ├── base.py            # Agent基类
+│   └── manager.py         # Agent管理器
 ├── tools/                  # 公共工具模块
+│   ├── database_tool.py   # 数据库工具
+│   ├── email_tool.py      # 邮件工具
+│   ├── file_tool.py       # 文件工具
+│   ├── http_tool.py       # HTTP请求工具
+│   └── scheduler_tool.py  # 调度工具
 ├── core/                   # 核心模块
+│   ├── config.py          # 配置管理
+│   ├── llm.py             # LLM接口
+│   ├── logger.py          # 日志模块
+│   └── memory.py          # 记忆模块
 ├── api/                    # 后端API
+│   ├── models/            # 数据模型
+│   ├── routers/           # 路由模块
+│   │   ├── admin.py      # 管理员路由
+│   │   └── auth.py       # 认证路由
+│   └── schemas/           # 数据模式
 ├── frontend/               # 前端项目
 │   ├── user/              # 用户端Vue项目
 │   └── admin/             # 管理端Vue项目
+├── command/                # 命令脚本
+│   ├── init_env.sh        # 环境初始化脚本
+│   ├── init_database.sh   # 数据库初始化脚本
+│   ├── init_database.sql  # 数据库初始化SQL
+│   └── quick_setup.sh     # 快速安装脚本
+├── deploy/                 # 部署相关
+│   ├── deploy.sh          # 部署脚本
+│   ├── check.sh           # 检查脚本
+│   └── nginx/             # Nginx配置
 ├── config/                 # 配置文件
+│   └── settings.yaml      # 应用配置
+├── tests/                  # 测试文件
+├── scripts/                # 工具脚本
 ├── logs/                   # 日志目录
-├── init_env.sh            # 环境初始化脚本
+├── data/                   # 数据目录
+├── build.sh               # 构建脚本
 ├── start_server.sh        # 服务启动脚本
 ├── stop_server.sh         # 服务停止脚本
 ├── requirements.txt        # Python依赖
@@ -35,17 +64,24 @@ ai-agent/
 
 ## 快速开始
 
-### 方式一：一键初始化（推荐）
+### 方式一：快速安装（推荐）
+
+```bash
+# 使用快速安装脚本（自动完成所有初始化）
+./command/quick_setup.sh
+```
+
+### 方式二：一键初始化
 
 ```bash
 # 1. 添加执行权限
-chmod +x init_env.sh start_server.sh stop_server.sh
+chmod +x command/*.sh start_server.sh stop_server.sh build.sh
 
 # 2. 检查环境依赖
-./init_env.sh check
+./command/init_env.sh check
 
 # 3. 初始化所有环境（后端+前端+数据库）
-./init_env.sh all
+./command/init_env.sh all
 
 # 4. 编辑配置文件
 vim .env  # 配置数据库密码等
@@ -54,17 +90,17 @@ vim .env  # 配置数据库密码等
 ./start_server.sh
 ```
 
-### 方式二：分步初始化
+### 方式三：分步初始化
 
 ```bash
 # 初始化后端环境
-./init_env.sh backend
+./command/init_env.sh backend
 
 # 初始化前端环境
-./init_env.sh frontend
+./command/init_env.sh frontend
 
 # 初始化数据库
-./init_env.sh db
+./command/init_env.sh db
 ```
 
 ### 方式三：手动初始化
@@ -184,6 +220,45 @@ DB_DATABASE=ai_agent
 
 # LLM配置（可选）
 ANTHROPIC_API_KEY=your_api_key_here
+```
+
+### 应用配置 (config/settings.yaml)
+
+项目使用YAML格式的配置文件，支持更灵活的配置管理。
+
+## 部署
+
+项目提供了完整的部署方案，详见 `deploy/` 目录：
+
+- **deploy/deploy.sh** - 自动化部署脚本
+- **deploy/check.sh** - 环境检查脚本
+- **deploy/nginx/** - Nginx配置示例
+- **deploy/DEPLOYMENT.md** - 详细部署文档
+
+### 快速部署
+
+```bash
+# 检查部署环境
+./deploy/check.sh
+
+# 执行部署
+./deploy/deploy.sh
+```
+
+## 开发指南
+
+### 运行测试
+
+```bash
+# 运行所有测试
+python -m pytest tests/
+```
+
+### 构建项目
+
+```bash
+# 使用构建脚本
+./build.sh
 ```
 
 ## 技术栈
