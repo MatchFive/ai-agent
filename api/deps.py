@@ -35,12 +35,19 @@ async def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="无效的认证凭证"
             )
+        # 确保 user_id 是整数类型
+        user_id = int(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证凭证"
+        )
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="登录已过期，请重新登录"
         )
-    except jwt.PyJWTError:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的认证凭证"
@@ -98,7 +105,8 @@ async def get_optional_user(
         user_id = payload.get("sub")
         if user_id is None:
             return None
-    except jwt.PyJWTError:
+        user_id = int(user_id)
+    except Exception:
         return None
 
     result = await session.execute(select(User).where(User.id == user_id))

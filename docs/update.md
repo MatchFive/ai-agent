@@ -1,5 +1,22 @@
 # 更新日志
 
+## 2026-03-25
+
+### Bug修复：管理端 API 401 未授权错误
+
+**问题描述：**
+- 管理端 Dashboard 页面调用 `/api/admin/stats` 返回 401 未授权
+- 原因：JWT 解码后 `user_id` 从 JSON 中取出时可能是字符串类型，导致数据库查询失败
+
+**解决方案：**
+- 修改 `api/deps.py` 中的认证逻辑，在 JWT 解码后显式将 `user_id` 转换为整数类型
+- 同时修复 `get_current_user` 和 `get_optional_user` 两个函数
+
+**修改文件：**
+- `api/deps.py`
+
+---
+
 ## 2026-03-24
 
 ### Bug修复：favicon.ico 404 错误
