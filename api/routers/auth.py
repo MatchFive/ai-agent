@@ -38,7 +38,7 @@ def create_access_token(user: User) -> str:
     """创建访问令牌"""
     expire = datetime.utcnow() + timedelta(days=7)
     payload = {
-        "sub": user.id,
+        "sub": user.uid,  # 使用 uid 作为唯一标识
         "exp": expire,
         "role": user.role
     }

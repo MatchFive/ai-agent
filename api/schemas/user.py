@@ -31,6 +31,7 @@ class UserResponse(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    uid: str
     role: str
     is_active: bool
     created_at: datetime
@@ -47,7 +48,7 @@ class Token(BaseModel):
 
 class TokenPayload(BaseModel):
     """Token载荷"""
-    sub: int  # user_id
+    sub: str  # user uid
     exp: datetime
     role: str
 

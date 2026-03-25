@@ -29,19 +29,12 @@ async def get_current_user(
             settings.secret_key,
             algorithms=["HS256"]
         )
-        user_id = payload.get("sub")
-        if user_id is None:
+        uid = payload.get("sub")
+        if uid is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="无效的认证凭证"
             )
-        # 确保 user_id 是整数类型
-        user_id = int(user_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的认证凭证"
-        )
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -53,8 +46,8 @@ async def get_current_user(
             detail="无效的认证凭证"
         )
 
-    # 查询用户
-    result = await session.execute(select(User).where(User.id == user_id))
+    # 通过 uid 查询用户
+    result = await session.execute(select(User).where(User.uid == uid))
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -102,14 +95,13 @@ async def get_optional_user(
             settings.secret_key,
             algorithms=["HS256"]
         )
-        user_id = payload.get("sub")
-        if user_id is None:
+        uid = payload.get("sub")
+        if uid is None:
             return None
-        user_id = int(user_id)
     except Exception:
         return None
 
-    result = await session.execute(select(User).where(User.id == user_id))
+    result = await session.execute(select(User).where(User.uid == uid))
     user = result.scalar_one_or_none()
 
     if user and user.is_active:

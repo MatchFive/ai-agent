@@ -3,6 +3,7 @@
 使用MySQL数据库 + aiomysql异步驱动
 """
 
+import uuid
 from datetime import datetime
 from typing import AsyncGenerator
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, select
@@ -21,6 +22,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    uid = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
     username = Column(String(50), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), default="user", nullable=False)  # admin / user
@@ -28,7 +30,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     def __repr__(self):
-        return f"<User(id={self.id}, username='{self.username}', role='{self.role}')>"
+        return f"<User(id={self.id}, uid='{self.uid}', username='{self.username}', role='{self.role}')>"
 
 
 class InviteCode(Base):
@@ -130,14 +132,23 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def create_default_admin():
-    """创建默认管理员账号"""
+    """创建默认管理员账号并迁移现有用户"""
     global _async_session_factory
 
     from passlib.context import CryptContext
     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
     async with _async_session_factory() as session:
-        # 检查是否已存在
+        # 迁移：为现有用户生成 uid
+        result = await session.execute(select(User).where(User.uid == None))
+        users_without_uid = result.scalars().all()
+        for user in users_without_uid:
+            user.uid = str(uuid.uuid4())
+            logger.info(f"Generated uid for user: {user.username}")
+        if users_without_uid:
+            await session.commit()
+
+        # 检查管理员是否已存在
         result = await session.execute(select(User).where(User.username == "admin"))
         admin = result.scalar_one_or_none()
 
