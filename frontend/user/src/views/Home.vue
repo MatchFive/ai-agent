@@ -17,6 +17,16 @@
         <el-card class="welcome-card">
           <h2>欢迎使用 AI-Agent</h2>
           <p>您已成功登录系统</p>
+
+          <!-- 功能入口 -->
+          <div class="feature-cards">
+            <el-card shadow="hover" class="feature-card" @click="router.push('/investment')">
+              <el-icon :size="40" color="#667eea"><TrendCharts /></el-icon>
+              <h3>投资理财分析</h3>
+              <p>黄金、股票走势分析</p>
+            </el-card>
+          </div>
+
           <div class="info-section">
             <el-descriptions :column="1" border>
               <el-descriptions-item label="用户名">
@@ -43,6 +53,7 @@
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { TrendCharts } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 
 const router = useRouter()
@@ -103,7 +114,7 @@ function formatDate(dateStr) {
 }
 
 .welcome-card {
-  max-width: 600px;
+  max-width: 800px;
   margin: 0 auto;
 }
 
@@ -112,9 +123,39 @@ function formatDate(dateStr) {
   color: #333;
 }
 
-.welcome-card p {
+.welcome-card > p {
   color: #666;
   margin-bottom: 20px;
+}
+
+.feature-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.feature-card {
+  cursor: pointer;
+  text-align: center;
+  padding: 20px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.feature-card h3 {
+  margin: 15px 0 10px;
+  color: #333;
+}
+
+.feature-card p {
+  color: #999;
+  font-size: 14px;
+  margin: 0;
 }
 
 .info-section {

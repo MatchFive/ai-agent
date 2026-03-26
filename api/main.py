@@ -10,6 +10,7 @@ from core.config import settings
 from core.logger import logger
 from api.models.user import init_db, close_db
 from api.routers import auth_router, admin_router
+from api.routers.agent import router as agent_router
 
 
 @asynccontextmanager
@@ -47,6 +48,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(auth_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
+app.include_router(agent_router, prefix="/api")
 
 
 @app.get("/")

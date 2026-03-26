@@ -6,6 +6,7 @@ __version__ = "0.1.0"
 
 from .base import BaseAgent, AgentStatus, Tool, ToolResult
 from .manager import AgentManager, agent_manager
+from .investment_agent import InvestmentAgent
 
 __all__ = [
     # Base
@@ -16,4 +17,6 @@ __all__ = [
     # Manager
     "AgentManager",
     "agent_manager",
+    # Agents
+    "InvestmentAgent",
 ]
