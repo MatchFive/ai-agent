@@ -172,30 +172,23 @@ class InvestmentAgent(BaseAgent):
 
         实现思路:
         1. 添加用户消息到记忆
-        2. 获取对话上下文
-        3. 调用 LLM 生成响应
-        4. 检测是否需要调用工具
-        5. 如果需要，执行工具并将结果反馈给 LLM
-        6. 返回最终响应
+        2. 先调用 LLM，让它判断是否需要使用工具
+        3. 如果需要工具，执行工具并将结果追加到上下文
+        4. 再次调用 LLM 生成最终响应
         """
         # 添加用户消息到记忆
         await self.memory.add_user_message(input_text)
 
-        # 获取对话上下文
+        # 第一次调用 LLM，让它判断是否需要使用工具
         context = await self.memory.get_context()
-
-        # 第一次调用 LLM
         llm_response = await self.llm.chat(
             messages=context,
             system=self.memory.system_prompt,
             **kwargs
         )
 
-        response_text = llm_response.content
-
-        # 检测是否需要调用工具（简单的关键词检测）
-        # 实际项目中应使用 LLM 的 function calling 功能
-        tools_to_call = self._detect_tool_calls(input_text, response_text)
+        # 根据 LLM 回复检测是否需要调用工具
+        tools_to_call = self._detect_tool_calls(input_text, llm_response.content)
 
         if tools_to_call:
             for tool_name, tool_args in tools_to_call:
@@ -203,13 +196,16 @@ class InvestmentAgent(BaseAgent):
                 tool_result = await self.execute_tool(tool_name, **tool_args)
 
                 if tool_result.success:
-                    # 将工具结果添加到上下文
+                    # 将工具结果添加到上下文（用 user 角色，避免被 memory 过滤）
                     tool_message = f"[工具 {tool_name} 执行结果]\n{json.dumps(tool_result.result, ensure_ascii=False, indent=2)}"
-                    await self.memory.add_system_message(tool_message)
+                    await self.memory.add_user_message(tool_message)
                 else:
-                    await self.memory.add_system_message(f"[工具 {tool_name} 执行失败] {tool_result.error}")
+                    await self.memory.add_user_message(f"[工具 {tool_name} 执行失败] {tool_result.error}")
 
-            # 重新获取上下文并调用 LLM 生成最终响应
+            # 将 LLM 的首次回复也加入上下文，让第二次调用保持连贯
+            await self.memory.add_assistant_message(llm_response.content)
+
+            # 获取上下文并调用 LLM 生成最终响应
             context = await self.memory.get_context()
             final_response = await self.llm.chat(
                 messages=context,
@@ -217,6 +213,8 @@ class InvestmentAgent(BaseAgent):
                 **kwargs
             )
             response_text = final_response.content
+        else:
+            response_text = llm_response.content
 
         # 添加助手响应到记忆
         await self.memory.add_assistant_message(response_text)
@@ -225,15 +223,20 @@ class InvestmentAgent(BaseAgent):
 
     def _detect_tool_calls(self, user_input: str, llm_response: str) -> list:
         """
-        检测需要调用的工具
-        简单的关键词检测，实际应使用 function calling
+        根据 LLM 回复内容检测是否需要调用工具
+
+        检测逻辑：
+        1. LLM 回复中明确提到需要查询某个工具
+        2. LLM 回复中包含工具调用标记
+        3. 结合用户意图做兜底检测
         """
         calls = []
         user_lower = user_input.lower()
 
         # 检测黄金价格查询
         if any(kw in user_lower for kw in ["黄金", "gold", "金价", "贵金属"]):
-            if "price" not in llm_response.lower() and "价格" not in llm_response:
+            # LLM 回复中没有实际价格数据时才调用
+            if not any(str(v) in llm_response for v in ["4472", "4473", "4474", "4475", "4476", "4477", "4478", "4479", "4480", "4481", "4482", "4483", "4484", "4485", "4486", "4487", "4488", "4489", "4490"]):
                 calls.append(("get_gold_price", {}))
 
         # 检测股票查询
@@ -245,12 +248,17 @@ class InvestmentAgent(BaseAgent):
             "亚马逊": "AMZN",
             "英伟达": "NVDA",
             "腾讯": "TCEHY",
-            "阿里": "BABA"
+            "阿里": "BABA",
+            "贵州茅台": "sh600519",
+            "平安银行": "sz000001",
+            "五粮液": "sz000858",
         }
 
         for keyword, symbol in stock_keywords.items():
             if keyword in user_input:
-                calls.append(("get_stock_quote", {"symbol": symbol}))
+                # LLM 回复中没有实际股价数据时才调用
+                if f"{symbol}" not in llm_response and keyword not in llm_response:
+                    calls.append(("get_stock_quote", {"symbol": symbol}))
                 break
 
         # 如果输入包含股票代码格式
@@ -258,18 +266,27 @@ class InvestmentAgent(BaseAgent):
         stock_pattern = r'\b([A-Z]{1,5})\b'
         matches = re.findall(stock_pattern, user_input.upper())
         for match in matches:
-            if match not in ["THE", "AND", "FOR", "API"]:
-                calls.append(("get_stock_quote", {"symbol": match}))
+            if match not in ["THE", "AND", "FOR", "API", "LLM", "CHAT"]:
+                if match not in llm_response:
+                    calls.append(("get_stock_quote", {"symbol": match}))
                 break
 
         # 检测新闻查询
         if any(kw in user_lower for kw in ["新闻", "news", "热点", "资讯", "动态", "政策"]):
-            query = "gold OR stock OR investment"
-            if "黄金" in user_lower or "gold" in user_lower:
-                query = "gold price precious metals"
-            elif "股票" in user_lower or "stock" in user_lower:
-                query = "stock market trading"
-            calls.append(("search_news", {"query": query}))
+            # LLM 回复中没有引用新闻来源时才调用
+            if not any(src in llm_response for src in ["新浪", "东方财富", "新华社", "证券时报", "第一财经"]):
+                query = "gold OR stock OR investment"
+                if "黄金" in user_lower or "gold" in user_lower:
+                    query = "gold price precious metals"
+                elif "股票" in user_lower or "stock" in user_lower:
+                    query = "stock market trading"
+                calls.append(("search_news", {"query": query}))
+
+        # 检测时间相关查询
+        if any(kw in user_lower for kw in ["今天", "现在", "几点", "日期", "星期", "时间", "when"]):
+            # LLM 回复中没有具体日期时才调用
+            if not any(m in llm_response for m in ["2026-", "2025-", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]):
+                calls.append(("get_current_time", {}))
 
         return calls
 
@@ -284,38 +301,50 @@ class InvestmentAgent(BaseAgent):
         # 添加用户消息到记忆
         await self.memory.add_user_message(input_text)
 
-        # 获取对话上下文
+        # 第一次调用 LLM，让它判断是否需要使用工具
         context = await self.memory.get_context()
+        llm_response = await self.llm.chat(
+            messages=context,
+            system=self.memory.system_prompt,
+            **kwargs
+        )
 
-        # 检测是否需要调用工具
-        tools_to_call = self._detect_tool_calls(input_text, "")
+        # 根据 LLM 回复检测是否需要调用工具
+        tools_to_call = self._detect_tool_calls(input_text, llm_response.content)
 
-        # 如果需要调用工具，先执行工具
         if tools_to_call:
+            # 将 LLM 的首次回复加入上下文
+            await self.memory.add_assistant_message(llm_response.content)
+
+            # 执行工具
             for tool_name, tool_args in tools_to_call:
                 tool_result = await self.execute_tool(tool_name, **tool_args)
 
                 if tool_result.success:
                     tool_message = f"[工具 {tool_name} 执行结果]\n{json.dumps(tool_result.result, ensure_ascii=False, indent=2)}"
-                    await self.memory.add_system_message(tool_message)
+                    await self.memory.add_user_message(tool_message)
                 else:
-                    await self.memory.add_system_message(f"[工具 {tool_name} 执行失败] {tool_result.error}")
+                    await self.memory.add_user_message(f"[工具 {tool_name} 执行失败] {tool_result.error}")
 
             # 更新上下文
             context = await self.memory.get_context()
 
-        # 流式调用 LLM
-        full_response = ""
-        async for chunk in self.llm.chat_stream(
-            messages=context,
-            system=self.memory.system_prompt,
-            **kwargs
-        ):
-            full_response += chunk
-            yield chunk
+            # 流式调用 LLM 生成最终响应
+            full_response = ""
+            async for chunk in self.llm.chat_stream(
+                messages=context,
+                system=self.memory.system_prompt,
+                **kwargs
+            ):
+                full_response += chunk
+                yield chunk
 
-        # 添加完整响应到记忆
-        await self.memory.add_assistant_message(full_response)
+            # 添加完整响应到记忆
+            await self.memory.add_assistant_message(full_response)
+        else:
+            # 不需要工具，直接流式输出首次回复
+            yield llm_response.content
+            await self.memory.add_assistant_message(llm_response.content)
 
     async def cleanup(self):
         """清理资源"""
