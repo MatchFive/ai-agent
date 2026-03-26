@@ -20,11 +20,10 @@ const routes = [
     component: () => import('../views/Home.vue'),
     meta: { requiresAuth: true }
   },
+  // 兼容旧链接，重定向到首页
   {
     path: '/investment',
-    name: 'Investment',
-    component: () => import('../views/InvestmentChat.vue'),
-    meta: { requiresAuth: true }
+    redirect: '/'
   }
 ]
 
