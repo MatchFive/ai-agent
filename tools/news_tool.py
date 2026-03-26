@@ -6,10 +6,11 @@
 from typing import Dict, Any
 from datetime import datetime, timedelta
 import json
-import logging
 
-# 配置logger
-logger = logging.getLogger(__name__)
+from loguru import logger
+
+# 工具专用logger，输出到 logs/tools_*.log
+tool_logger = logger.bind(category="tool")
 
 
 class HttpTool:
@@ -57,47 +58,54 @@ class NewsTool:
         query: str = "黄金 OR 股票 OR 投资 OR 财经",
         page_size: int = 10
     ) -> Dict[str, Any]:
-        """
-        搜索财经新闻
-
-        Args:
-            query: 搜索关键词（支持中文）
-            page_size: 返回数量
-
-        Returns:
-            {
-                "success": True,
-                "articles": [
-                    {
-                        "title": "...",
-                        "source": "新浪财经",
-                        "url": "...",
-                        "published_at": "2026-03-26T10:00:00Z",
-                        "summary": "..."
-                    }
-                ]
-            }
-        """
+        """搜索财经新闻"""
+        tool_logger.info(f"[新闻搜索] 开始查询 | query={query} | page_size={page_size}")
         try:
             # 优先使用新浪财经
             result = await self._fetch_from_sina(query, page_size)
             if result.get("success"):
+                self._log_result(query, result)
                 return result
 
             # 备用：东方财富网
             result = await self._fetch_from_eastmoney(query, page_size)
             if result.get("success"):
+                self._log_result(query, result)
                 return result
 
             # 如果都失败，返回模拟数据
-            return self._get_simulated_news()
+            result = self._get_simulated_news()
+            self._log_result(query, result)
+            return result
 
         except Exception as e:
             logger.error(f"Failed to fetch news: {e}")
+            tool_logger.error(f"[新闻搜索] 查询异常 | query={query} | error={e}")
             return {
                 "success": False,
                 "error": str(e)
             }
+
+    def _log_result(self, query: str, result: Dict[str, Any]) -> None:
+        """记录工具调用结果"""
+        is_simulated = result.get("source") == "Simulated"
+        if is_simulated:
+            tool_logger.warning(
+                f"[新闻搜索] 返回模拟数据 | "
+                f"query={query} | "
+                f"count={result.get('total')} | "
+                f"reason: API全部失败，请检查网络"
+            )
+        else:
+            articles = result.get("articles", [])
+            titles = [a.get("title", "")[:30] for a in articles[:3]]
+            tool_logger.info(
+                f"[新闻搜索] 调用成功 | "
+                f"source={result.get('source')} | "
+                f"query={query} | "
+                f"count={result.get('total')} | "
+                f"titles={titles}"
+            )
 
     async def _fetch_from_sina(
         self,
@@ -130,7 +138,6 @@ class NewsTool:
                 if data.get("result", {}).get("status", {}).get("code") == 0:
                     articles = []
                     for item in data.get("result", {}).get("data", []):
-                        # 处理时间戳
                         published_at = ""
                         try:
                             ctime = item.get("ctime")
@@ -138,7 +145,7 @@ class NewsTool:
                                 if isinstance(ctime, (int, float)):
                                     published_at = datetime.fromtimestamp(ctime).isoformat()
                                 elif isinstance(ctime, str):
-                                    published_at = ctime  # 如果已经是字符串，直接使用
+                                    published_at = ctime
                         except Exception as e:
                             logger.debug(f"解析时间失败: {e}")
 
@@ -265,13 +272,7 @@ class NewsTool:
         topic: str,
         page_size: int = 5
     ) -> Dict[str, Any]:
-        """
-        按主题搜索新闻
-
-        Args:
-            topic: 主题 (黄金, 股票, 加密货币, 经济, 中国)
-            page_size: 返回数量
-        """
+        """按主题搜索新闻"""
         topic_queries = {
             "黄金": "黄金 价格 贵金属",
             "股票": "股票 市场 交易",

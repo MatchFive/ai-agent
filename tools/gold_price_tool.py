@@ -6,10 +6,11 @@
 from typing import Dict, Any
 from datetime import datetime
 import json
-import logging
 
-# 配置logger
-logger = logging.getLogger(__name__)
+from loguru import logger
+
+# 工具专用logger，输出到 logs/tools_*.log
+tool_logger = logger.bind(category="tool")
 
 
 class HttpTool:
@@ -53,40 +54,50 @@ class GoldPriceTool:
         self.http_client = HttpTool(timeout=10.0)
 
     async def get_current_price(self) -> Dict[str, Any]:
-        """
-        获取当前黄金价格
-
-        Returns:
-            {
-                "success": True,
-                "price": 2000.50,
-                "currency": "USD",
-                "change": 5.20,
-                "change_percent": 0.26,
-                "timestamp": "2026-03-26T10:30:00Z",
-                "source": "新浪财经"
-            }
-        """
+        """获取当前黄金价格"""
+        tool_logger.info("[黄金价格] 开始查询")
         try:
             # 优先使用新浪财经
             result = await self._fetch_from_sina()
             if result.get("success"):
+                self._log_result(result)
                 return result
 
             # 备用：东方财富网
             result = await self._fetch_from_eastmoney()
             if result.get("success"):
+                self._log_result(result)
                 return result
 
             # 如果都失败，返回模拟数据
-            return self._get_simulated_data()
+            result = self._get_simulated_data()
+            self._log_result(result)
+            return result
 
         except Exception as e:
             logger.error(f"Failed to fetch gold price: {e}")
+            tool_logger.error(f"[黄金价格] 查询异常: {e}")
             return {
                 "success": False,
                 "error": str(e)
             }
+
+    def _log_result(self, result: Dict[str, Any]) -> None:
+        """记录工具调用结果"""
+        is_simulated = result.get("source") == "Simulated"
+        if is_simulated:
+            tool_logger.warning(
+                f"[黄金价格] 返回模拟数据 | "
+                f"price={result.get('price')} {result.get('currency')} | "
+                f"reason: API全部失败，请检查网络"
+            )
+        else:
+            tool_logger.info(
+                f"[黄金价格] 调用成功 | "
+                f"source={result.get('source')} | "
+                f"price={result.get('price')} {result.get('currency')} | "
+                f"change={result.get('change')} ({result.get('change_percent')}%)"
+            )
 
     async def _fetch_from_sina(self) -> Dict[str, Any]:
         """从新浪财经获取黄金价格"""
@@ -99,16 +110,13 @@ class GoldPriceTool:
             if response.get("success"):
                 body = response.get("body", "")
                 if body and isinstance(body, str):
-                    # 解析新浪财经返回的数据格式: var hq_str_hf_GC="价格,涨跌,涨跌幅,..."
                     if "hq_str_hf_GC=" in body:
                         data_str = body.split('hq_str_hf_GC="')[1].split('"')[0]
                         parts = data_str.split(",")
 
                         if len(parts) >= 6:
-                            # 数据格式: 价格,,买价,卖价,最高价,最低价,时间,昨收价,...
                             try:
                                 price = float(parts[0]) if parts[0] else 0
-                                # 计算涨跌（当前价 - 昨收价）
                                 yesterday_close = float(parts[7]) if len(parts) > 7 and parts[7] else price
                                 change = price - yesterday_close
                                 change_percent = (change / yesterday_close * 100) if yesterday_close else 0
@@ -145,7 +153,7 @@ class GoldPriceTool:
                     return {
                         "success": True,
                         "price": quote.get("price", 0),
-                        "currency": "CNY",  # 东方财富返回人民币价格
+                        "currency": "CNY",
                         "change": quote.get("change", 0),
                         "change_percent": quote.get("changePct", 0),
                         "timestamp": datetime.utcnow().isoformat(),

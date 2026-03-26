@@ -6,10 +6,11 @@
 from typing import Dict, Any, List
 from datetime import datetime
 import json
-import logging
 
-# 配置logger
-logger = logging.getLogger(__name__)
+from loguru import logger
+
+# 工具专用logger，输出到 logs/tools_*.log
+tool_logger = logger.bind(category="tool")
 
 
 class HttpTool:
@@ -53,62 +54,63 @@ class StockDataTool:
         self.http_client = HttpTool(timeout=10.0)
 
     async def get_quote(self, symbol: str) -> Dict[str, Any]:
-        """
-        获取股票实时报价
-
-        Args:
-            symbol: 股票代码
-                - A股: sh600519, sz000001
-                - 港股: hk00700
-                - 美股: AAPL, TSLA
-
-        Returns:
-            {
-                "success": True,
-                "symbol": "SH600519",
-                "name": "贵州茅台",
-                "price": 1850.00,
-                "change": 28.50,
-                "change_percent": 1.56,
-                "volume": 50000000,
-                "timestamp": "2026-03-26T10:30:00Z",
-                "source": "新浪财经"
-            }
-        """
+        """获取股票实时报价"""
+        tool_logger.info(f"[股票数据] 开始查询 | symbol={symbol}")
         try:
             # 优先使用新浪财经
             result = await self._fetch_from_sina(symbol)
             if result.get("success"):
+                self._log_result(symbol, result)
                 return result
 
             # 备用：东方财富网
             result = await self._fetch_from_eastmoney(symbol)
             if result.get("success"):
+                self._log_result(symbol, result)
                 return result
 
             # 如果都失败，返回模拟数据
-            return self._get_simulated_data(symbol)
+            result = self._get_simulated_data(symbol)
+            self._log_result(symbol, result)
+            return result
 
         except Exception as e:
             logger.error(f"Failed to fetch stock data for {symbol}: {e}")
+            tool_logger.error(f"[股票数据] 查询异常 | symbol={symbol} | error={e}")
             return {
                 "success": False,
                 "symbol": symbol,
                 "error": str(e)
             }
 
+    def _log_result(self, symbol: str, result: Dict[str, Any]) -> None:
+        """记录工具调用结果"""
+        is_simulated = result.get("source") == "Simulated"
+        if is_simulated:
+            tool_logger.warning(
+                f"[股票数据] 返回模拟数据 | "
+                f"symbol={symbol} | "
+                f"price={result.get('price')} | "
+                f"reason: API全部失败，请检查网络"
+            )
+        else:
+            tool_logger.info(
+                f"[股票数据] 调用成功 | "
+                f"symbol={symbol} | name={result.get('name')} | "
+                f"source={result.get('source')} | "
+                f"price={result.get('price')} | "
+                f"change={result.get('change')} ({result.get('change_percent')}%) | "
+                f"volume={result.get('volume')}"
+            )
+
     async def _fetch_from_sina(self, symbol: str) -> Dict[str, Any]:
         """从新浪财经获取股票数据"""
         try:
-            # 支持A股、港股、美股
             if symbol.startswith(("sh", "sz", "SH", "SZ")):
-                # A股
                 code = symbol.lower()
             elif symbol.startswith(("hk", "HK")):
-                # 港股
                 code = symbol.lower().replace("hk", "hk")
             else:
-                # 美股
                 code = f"gb_{symbol.lower()}"
 
             url = f"https://hq.sinajs.cn/list={code}"
@@ -119,18 +121,15 @@ class StockDataTool:
             if response.get("success"):
                 body = response.get("body", "")
                 if body and isinstance(body, str):
-                    # 解析新浪财经返回的数据格式
                     var_name = f"hq_str_{code}="
                     if var_name in body:
                         data_str = body.split(f'{var_name}"')[1].split('"')[0]
                         parts = data_str.split(",")
 
-                        # 判断数据类型（通过代码前缀）
                         is_a_stock = code.startswith(("sh", "sz"))
                         is_us_stock = code.startswith("gb_")
 
                         if is_a_stock and len(parts) >= 32:
-                            # A股数据格式
                             name = parts[0]
                             price = float(parts[3]) if parts[3] else 0
                             yesterday_close = float(parts[2]) if parts[2] else price
@@ -150,12 +149,10 @@ class StockDataTool:
                                 "source": "新浪财经"
                             }
                         elif is_us_stock and len(parts) >= 10:
-                            # 美股数据格式：名称,当前价,涨跌额,时间,涨跌幅,开盘价,最高价,最低价,...
                             try:
                                 name = parts[0]
                                 price = float(parts[1]) if parts[1] else 0
                                 change = float(parts[2]) if parts[2] else 0
-                                # parts[3]是时间，跳过
                                 change_percent = float(parts[4]) if parts[4] else 0
                                 volume = int(float(parts[10])) if len(parts) > 10 and parts[10] else 0
 
@@ -173,7 +170,6 @@ class StockDataTool:
                             except (ValueError, IndexError) as e:
                                 logger.warning(f"解析美股数据失败: {e}")
                         elif len(parts) >= 10:
-                            # 港股数据格式
                             name = parts[0]
                             price = float(parts[6]) if len(parts) > 6 and parts[6] else 0
                             yesterday_close = float(parts[4]) if len(parts) > 4 and parts[4] else price
@@ -200,13 +196,11 @@ class StockDataTool:
     async def _fetch_from_eastmoney(self, symbol: str) -> Dict[str, Any]:
         """从东方财富网获取股票数据"""
         try:
-            # 判断股票类型
             if any(symbol.startswith(prefix) for prefix in ["sh", "sz", "SH", "SZ"]):
                 market = "SH" if symbol.upper().startswith("SH") else "SZ"
                 code = symbol[2:]
                 url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={market}.{code}&fields=f43,f44,f45,f46,f47,f48,f50,f51,f52,f58"
             else:
-                # 美股/港股
                 url = f"https://push2.eastmoney.com/api/qt/stock/get?secid=106.{symbol}&fields=f43,f44,f45,f46,f47,f48,f50,f51,f52,f58"
 
             response = await self.http_client.get(url)
