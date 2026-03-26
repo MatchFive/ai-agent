@@ -59,11 +59,11 @@ class AnthropicClient(BaseLLMClient):
         model: Optional[str] = None,
         base_url: Optional[str] = None,
     ):
-        self.api_key = api_key or settings.llm.api_key
-        self.model = model or settings.llm.model
-        self.base_url = base_url or settings.llm.base_url
-        self.max_tokens = settings.llm.max_tokens
-        self.temperature = settings.llm.temperature
+        self.api_key = api_key or settings.llm_api_key
+        self.model = model or settings.llm_model
+        self.base_url = base_url or settings.llm_base_url
+        self.max_tokens = settings.llm_max_tokens
+        self.temperature = settings.llm_temperature
         self._client = None
 
     def _get_client(self):
@@ -151,7 +151,7 @@ class LLMClient:
         model: Optional[str] = None,
         base_url: Optional[str] = None,
     ):
-        self.provider = provider or settings.llm.provider
+        self.provider = provider or settings.llm_provider
         self.api_key = api_key
         self.model = model
         self.base_url = base_url

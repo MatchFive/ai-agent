@@ -11,8 +11,15 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.jobstores.memory import MemoryJobStore
-from apscheduler.jobstores.redis import RedisJobStore
 from apscheduler.executors.pool import ThreadPoolExecutor
+
+# 延迟导入 RedisJobStore，避免在没有 redis 模块时报错
+try:
+    from apscheduler.jobstores.redis import RedisJobStore
+    REDIS_AVAILABLE = True
+except ImportError:
+    RedisJobStore = None
+    REDIS_AVAILABLE = False
 
 from core.config import settings
 from core.logger import logger
@@ -29,8 +36,8 @@ class SchedulerTool:
         backend: Optional[str] = None,
         redis_url: Optional[str] = None,
     ):
-        self.backend = backend or settings.scheduler.backend
-        self.redis_url = redis_url or settings.scheduler.redis_url
+        self.backend = backend or settings.scheduler_backend
+        self.redis_url = redis_url or settings.scheduler_redis_url
         self._scheduler: Optional[AsyncIOScheduler] = None
         self._job_callbacks: Dict[str, Callable] = {}
 
@@ -41,11 +48,15 @@ class SchedulerTool:
             executors = {'default': ThreadPoolExecutor(20)}
 
             if self.backend == 'redis' and self.redis_url:
-                jobstores['default'] = RedisJobStore(
-                    jobs_key='agent:scheduler:jobs',
-                    run_times_key='agent:scheduler:run_times',
-                    url=self.redis_url
-                )
+                if not REDIS_AVAILABLE:
+                    logger.warning("Redis backend requested but redis module not installed. Using memory backend instead.")
+                    logger.warning("To use Redis backend, install redis: pip install redis")
+                else:
+                    jobstores['default'] = RedisJobStore(
+                        jobs_key='agent:scheduler:jobs',
+                        run_times_key='agent:scheduler:run_times',
+                        url=self.redis_url
+                    )
 
             self._scheduler = AsyncIOScheduler(
                 jobstores=jobstores,
