@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from core.logger import logger
 from api.models.user import init_db, close_db
+from core.redis import close_redis
 from api.routers import auth_router, admin_router
 from api.routers.agent import router as agent_router
 
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI):
 
     # 关闭时
     logger.info("Shutting down AI-Agent API...")
+    await close_redis()
     await close_db()
 
 

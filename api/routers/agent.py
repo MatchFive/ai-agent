@@ -15,6 +15,7 @@ from api.schemas.agent import (
     ChatMessage,
     AgentInfo
 )
+from api.models.conversation import DatabaseStorage
 from agents.manager import agent_manager
 from agents.investment_agent import InvestmentAgent
 from core.logger import logger
@@ -36,6 +37,12 @@ async def get_investment_agent() -> InvestmentAgent:
         logger.info("InvestmentAgent initialized and registered")
 
     return _investment_agent
+
+
+def _setup_conversation(agent: InvestmentAgent, conversation_id: str, user_id: int = None):
+    """设置 Agent 使用数据库存储的指定会话"""
+    storage = DatabaseStorage(conversation_id, user_id=user_id)
+    agent.memory.set_storage(storage)
 
 
 @router.get("/info", response_model=AgentInfo, summary="获取Agent信息")
@@ -69,6 +76,9 @@ async def chat(
 
         logger.info(f"User {current_user.username} chatting with agent, conversation: {conversation_id}")
 
+        # 设置数据库存储
+        _setup_conversation(agent, conversation_id, user_id=current_user.id)
+
         # 调用 Agent
         response = await agent.run(request.message)
 
@@ -101,6 +111,9 @@ async def chat_stream(
     conversation_id = request.conversation_id or str(uuid.uuid4())
 
     logger.info(f"User {current_user.username} streaming chat, conversation: {conversation_id}")
+
+    # 设置数据库存储
+    _setup_conversation(agent, conversation_id, user_id=current_user.id)
 
     async def event_generator():
         """SSE 事件生成器"""
@@ -149,13 +162,18 @@ async def chat_stream(
 
 @router.post("/reset", summary="重置对话")
 async def reset_conversation(
+    request: AgentChatRequest = None,
     current_user: User = Depends(get_current_user),
     agent: InvestmentAgent = Depends(get_investment_agent)
 ):
     """
-    重置对话，清空记忆
+    重置对话，清空记忆（同时清除数据库记录）
     """
     try:
+        # 如果有 conversation_id，先设置 DB 存储再清除
+        if request and request.conversation_id:
+            _setup_conversation(agent, request.conversation_id, user_id=current_user.id)
+
         await agent.reset()
         logger.info(f"User {current_user.username} reset conversation")
         return {"message": "对话已重置", "success": True}

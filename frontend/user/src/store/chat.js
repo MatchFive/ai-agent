@@ -109,7 +109,7 @@ export const useChatStore = defineStore('chat', {
      */
     async clearChat() {
       try {
-        await agentApi.reset()
+        await agentApi.reset(this.conversationId)
         this.messages = []
         this.conversationId = null
         this.error = null

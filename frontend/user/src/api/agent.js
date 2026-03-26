@@ -109,7 +109,9 @@ export const agentApi = {
   /**
    * 重置对话
    */
-  reset: () => api.post('/agent/reset'),
+  reset: (conversationId = null) => api.post('/agent/reset', {
+    conversation_id: conversationId
+  }),
 
   /**
    * 获取工具列表

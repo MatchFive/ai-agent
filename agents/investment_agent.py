@@ -3,17 +3,18 @@
 """
 
 from typing import Optional, AsyncGenerator
+from datetime import datetime, timezone
 import json
 import asyncio
+import hashlib
 
-from agents.base import BaseAgent, Tool
+from agents.base import BaseAgent, Tool, ToolResult
 from core.llm import LLMClient
 from core.memory import Memory
 from core.logger import logger
 from tools.gold_price_tool import GoldPriceTool
 from tools.stock_data_tool import StockDataTool
 from tools.news_tool import NewsTool
-from tools.time_tool import TimeTool
 
 
 class InvestmentAgent(BaseAgent):
@@ -47,13 +48,14 @@ class InvestmentAgent(BaseAgent):
 - get_gold_price: 获取当前黄金价格（美元/盎司）
 - get_stock_quote: 获取股票实时报价，参数: symbol（股票代码）
 - search_news: 搜索财经新闻，参数: query（搜索关键词，可选）
-- get_current_time: 获取当前服务器时间（日期、星期、时间戳）
 
 **工作流程**:
 - 当用户询问黄金价格时，使用 get_gold_price 工具获取实时数据
 - 当用户询问股票时，使用 get_stock_quote 工具获取股票信息
 - 当需要了解市场动态时，使用 search_news 工具获取财经新闻
 - 综合分析数据后，给出专业、客观的分析报告
+
+**时间信息**: 每条用户消息开头会附带当前服务器时间（格式: [当前时间: YYYY-MM-DD HH:MM:SS 星期X]），请以此时间为准回答时间相关问题，不要猜测当前时间。
 
 **注意事项**:
 - 始终基于数据说话，不要凭空猜测
@@ -78,7 +80,6 @@ class InvestmentAgent(BaseAgent):
         self.gold_tool = GoldPriceTool()
         self.stock_tool = StockDataTool()
         self.news_tool = NewsTool()
-        self.time_tool = TimeTool()
 
         # 注册工具
         self._register_tools()
@@ -135,19 +136,6 @@ class InvestmentAgent(BaseAgent):
         )
         self.register_tool(news_tool)
 
-        # 时间工具
-        time_tool = Tool(
-            name="get_current_time",
-            description="获取当前服务器时间，返回日期、星期、时间戳等信息，无需参数",
-            parameters={
-                "type": "object",
-                "properties": {},
-                "required": []
-            },
-            handler=self._handle_current_time
-        )
-        self.register_tool(time_tool)
-
     async def _handle_gold_price(self, **kwargs) -> dict:
         """处理黄金价格查询"""
         result = await self.gold_tool.get_current_price()
@@ -163,20 +151,63 @@ class InvestmentAgent(BaseAgent):
         result = await self.news_tool.search_financial_news(query=query)
         return result
 
-    def _handle_current_time(self, **kwargs) -> dict:
-        """处理时间查询"""
-        return self.time_tool.get_current_time()
+    def _inject_time(self, input_text: str) -> str:
+        """在用户消息中注入当前时间"""
+        now = datetime.now(timezone.utc).astimezone()
+        weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+        time_tag = f"[当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')} {weekdays[now.weekday()]}]"
+        return f"{time_tag}\n{input_text}"
+
+    async def execute_tool(self, tool_name: str, **kwargs) -> ToolResult:
+        """执行工具（带 Redis 缓存）"""
+        try:
+            from core.redis import get_redis
+            redis = await get_redis()
+
+            # 生成缓存 key
+            args_str = json.dumps(kwargs, sort_keys=True, ensure_ascii=False)
+            cache_key = f"tool:{tool_name}:{hashlib.md5(args_str.encode()).hexdigest()}"
+
+            # 检查缓存
+            cached = await redis.get(cache_key)
+            if cached:
+                logger.info(f"[工具缓存命中] {tool_name} | args={kwargs}")
+                return ToolResult(success=True, result=json.loads(cached))
+        except Exception as e:
+            logger.warning(f"[Redis] 缓存读取失败，降级为直接执行: {e}")
+
+        # 执行工具
+        result = await super().execute_tool(tool_name, **kwargs)
+
+        # 缓存成功结果（15分钟过期）
+        if result.success:
+            try:
+                from core.redis import get_redis
+                redis = await get_redis()
+                await redis.setex(
+                    cache_key,
+                    900,  # 15分钟
+                    json.dumps(result.result, ensure_ascii=False)
+                )
+                logger.info(f"[工具缓存写入] {tool_name} | TTL=900s")
+            except Exception as e:
+                logger.warning(f"[Redis] 缓存写入失败: {e}")
+
+        return result
 
     async def run(self, input_text: str, **kwargs) -> str:
         """
         运行 Agent（非流式）
 
         实现思路:
-        1. 添加用户消息到记忆
+        1. 注入时间后添加用户消息到记忆
         2. 先调用 LLM，让它判断是否需要使用工具
         3. 如果需要工具，执行工具并将结果追加到上下文
         4. 再次调用 LLM 生成最终响应
         """
+        # 注入当前时间
+        input_text = self._inject_time(input_text)
+
         # 添加用户消息到记忆
         await self.memory.add_user_message(input_text)
 
@@ -283,12 +314,6 @@ class InvestmentAgent(BaseAgent):
                     query = "stock market trading"
                 calls.append(("search_news", {"query": query}))
 
-        # 检测时间相关查询
-        if any(kw in user_lower for kw in ["今天", "现在", "几点", "日期", "星期", "时间", "when"]):
-            # LLM 回复中没有具体日期时才调用
-            if not any(m in llm_response for m in ["2026-", "2025-", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]):
-                calls.append(("get_current_time", {}))
-
         return calls
 
     async def run_stream(
@@ -303,6 +328,9 @@ class InvestmentAgent(BaseAgent):
         - 普通文本: 直接 yield 字符串（LLM 内容）
         - 状态事件: yield JSON 字符串 {"type": "status", "content": "..."}
         """
+        # 注入当前时间
+        input_text = self._inject_time(input_text)
+
         # 添加用户消息到记忆
         await self.memory.add_user_message(input_text)
 

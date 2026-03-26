@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     scheduler_backend: str = Field(default="memory")
     scheduler_redis_url: Optional[str] = Field(default=None)
 
+    # Redis配置
+    redis_url: str = Field(default="redis://localhost:6379/0", description="Redis连接URL")
+
     # 数据库配置 - MySQL
     db_host: str = Field(default="localhost")
     db_port: int = Field(default=3306)

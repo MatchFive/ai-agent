@@ -86,6 +86,11 @@ class Memory:
         self.max_context_tokens = max_context_tokens
         self.system_prompt = system_prompt
 
+    def set_storage(self, storage: 'BaseMemory'):
+        """设置存储后端（用于切换会话）"""
+        self.storage = storage
+        logger.info(f"Memory storage switched to {type(storage).__name__}")
+
     async def add_user_message(self, content: str, **metadata) -> None:
         """添加用户消息"""
         await self.storage.add(MemoryItem(
