@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     )
 
     # LLM配置
-    llm_provider: str = Field(default="anthropic", description="LLM提供商")
-    llm_model: str = Field(default="claude-sonnet-4-6", description="模型名称")
+    llm_provider: str = Field(default="openai", description="LLM提供商")
+    llm_model: str = Field(default="deepseek-chat", description="模型名称")
     llm_api_key: str = Field(default="", description="API密钥")
     llm_base_url: Optional[str] = Field(default=None, description="API基础URL")
     llm_max_tokens: int = Field(default=4096, description="最大token数")

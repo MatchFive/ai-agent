@@ -1,5 +1,6 @@
 """
 LLM接口封装模块
+使用 openai 库对接国内大模型（OpenAI 兼容接口）
 """
 
 from abc import ABC, abstractmethod
@@ -50,8 +51,8 @@ class BaseLLMClient(ABC):
         pass
 
 
-class AnthropicClient(BaseLLMClient):
-    """Anthropic Claude客户端"""
+class OpenAIClient(BaseLLMClient):
+    """OpenAI 兼容接口客户端（支持国内大模型）"""
 
     def __init__(
         self,
@@ -69,8 +70,8 @@ class AnthropicClient(BaseLLMClient):
     def _get_client(self):
         """延迟初始化客户端"""
         if self._client is None:
-            import anthropic
-            self._client = anthropic.AsyncAnthropic(
+            import openai
+            self._client = openai.AsyncOpenAI(
                 api_key=self.api_key,
                 base_url=self.base_url,
             )
@@ -85,31 +86,30 @@ class AnthropicClient(BaseLLMClient):
         """发送对话请求"""
         client = self._get_client()
 
-        # 分离system消息
-        system_prompt = system
-        chat_messages = [m.to_dict() for m in messages if m.role != "system"]
+        # 构建消息列表，system 消息放在最前面
+        chat_messages = []
+        if system:
+            chat_messages.append({"role": "system", "content": system})
+        chat_messages.extend(m.to_dict() for m in messages if m.role != "system")
 
-        extra_args = {
-            "max_tokens": kwargs.get("max_tokens", self.max_tokens),
-            "temperature": kwargs.get("temperature", self.temperature),
-        }
-        if system_prompt:
-            extra_args["system"] = system_prompt
-
-        response = await client.messages.create(
+        response = await client.chat.completions.create(
             model=self.model,
             messages=chat_messages,
-            **extra_args
+            max_tokens=kwargs.get("max_tokens", self.max_tokens),
+            temperature=kwargs.get("temperature", self.temperature),
         )
 
+        choice = response.choices[0]
+        usage = response.usage
+
         return LLMResponse(
-            content=response.content[0].text,
+            content=choice.message.content or "",
             model=response.model,
             usage={
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
+                "input_tokens": usage.prompt_tokens if usage else 0,
+                "output_tokens": usage.completion_tokens if usage else 0,
             },
-            finish_reason=response.stop_reason,
+            finish_reason=choice.finish_reason or "",
         )
 
     async def chat_stream(
@@ -121,22 +121,23 @@ class AnthropicClient(BaseLLMClient):
         """流式对话"""
         client = self._get_client()
 
-        chat_messages = [m.to_dict() for m in messages if m.role != "system"]
-
-        extra_args = {
-            "max_tokens": kwargs.get("max_tokens", self.max_tokens),
-            "temperature": kwargs.get("temperature", self.temperature),
-        }
+        chat_messages = []
         if system:
-            extra_args["system"] = system
+            chat_messages.append({"role": "system", "content": system})
+        chat_messages.extend(m.to_dict() for m in messages if m.role != "system")
 
-        async with client.messages.stream(
+        stream = await client.chat.completions.create(
             model=self.model,
             messages=chat_messages,
-            **extra_args
-        ) as stream:
-            async for text in stream.text_stream:
-                yield text
+            max_tokens=kwargs.get("max_tokens", self.max_tokens),
+            temperature=kwargs.get("temperature", self.temperature),
+            stream=True,
+        )
+
+        async for chunk in stream:
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta and delta.content:
+                yield delta.content
 
 
 class LLMClient:
@@ -161,8 +162,8 @@ class LLMClient:
         cache_key = f"{self.provider}_{self.model}"
 
         if cache_key not in self._clients:
-            if self.provider == "anthropic":
-                self._clients[cache_key] = AnthropicClient(
+            if self.provider == "openai":
+                self._clients[cache_key] = OpenAIClient(
                     api_key=self.api_key,
                     model=self.model,
                     base_url=self.base_url,
@@ -179,7 +180,6 @@ class LLMClient:
         **kwargs
     ) -> LLMResponse:
         """发送对话请求"""
-        # 转换消息格式
         formatted_messages = []
         for m in messages:
             if isinstance(m, dict):
