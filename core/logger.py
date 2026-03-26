@@ -89,6 +89,18 @@ def setup_logger(
         filter=lambda record: record["extra"].get("category") == "tool",
     )
 
+    # LLM 调用专用日志文件
+    logger.add(
+        log_path / "llm_{time:YYYY-MM-DD}.log",
+        format=file_format,
+        level="INFO",
+        rotation=rotation,
+        retention=retention,
+        encoding="utf-8",
+        enqueue=True,
+        filter=lambda record: record["extra"].get("category") == "llm",
+    )
+
     return logger
 
 

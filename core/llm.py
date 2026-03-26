@@ -11,6 +11,9 @@ from pydantic import BaseModel
 from .config import settings
 from .logger import logger
 
+# LLM 调用专用 logger
+llm_logger = logger.bind(category="llm")
+
 
 class Message(BaseModel):
     """消息模型"""
@@ -188,7 +191,25 @@ class LLMClient:
                 formatted_messages.append(m)
 
         client = self._get_client()
-        return await client.chat(formatted_messages, system=system, **kwargs)
+
+        # 记录发送给大模型的消息
+        llm_logger.info(
+            f"[LLM请求] 非流式 | model={client.model} | "
+            f"messages={len(formatted_messages)}条 | "
+            f"content={'; '.join(m.content[:80] for m in formatted_messages)}"
+        )
+
+        result = await client.chat(formatted_messages, system=system, **kwargs)
+
+        # 记录大模型返回结果
+        llm_logger.info(
+            f"[LLM响应] 非流式 | model={result.model} | "
+            f"finish_reason={result.finish_reason} | "
+            f"usage=input:{result.usage.get('input_tokens', 0)} output:{result.usage.get('output_tokens', 0)} | "
+            f"content={result.content[:200]}"
+        )
+
+        return result
 
     async def chat_stream(
         self,
@@ -205,5 +226,22 @@ class LLMClient:
                 formatted_messages.append(m)
 
         client = self._get_client()
+
+        # 记录发送给大模型的消息
+        llm_logger.info(
+            f"[LLM请求] 流式 | model={client.model} | "
+            f"messages={len(formatted_messages)}条 | "
+            f"content={'; '.join(m.content[:80] for m in formatted_messages)}"
+        )
+
+        full_response = ""
         async for chunk in client.chat_stream(formatted_messages, system=system, **kwargs):
+            full_response += chunk
             yield chunk
+
+        # 记录大模型返回结果
+        llm_logger.info(
+            f"[LLM响应] 流式 | model={client.model} | "
+            f"content_length={len(full_response)} | "
+            f"content={full_response[:200]}"
+        )

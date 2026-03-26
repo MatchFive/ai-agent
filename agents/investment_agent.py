@@ -12,6 +12,7 @@ from core.logger import logger
 from tools.gold_price_tool import GoldPriceTool
 from tools.stock_data_tool import StockDataTool
 from tools.news_tool import NewsTool
+from tools.time_tool import TimeTool
 
 
 class InvestmentAgent(BaseAgent):
@@ -45,6 +46,7 @@ class InvestmentAgent(BaseAgent):
 - get_gold_price: 获取当前黄金价格（美元/盎司）
 - get_stock_quote: 获取股票实时报价，参数: symbol（股票代码）
 - search_news: 搜索财经新闻，参数: query（搜索关键词，可选）
+- get_current_time: 获取当前服务器时间（日期、星期、时间戳）
 
 **工作流程**:
 - 当用户询问黄金价格时，使用 get_gold_price 工具获取实时数据
@@ -75,6 +77,7 @@ class InvestmentAgent(BaseAgent):
         self.gold_tool = GoldPriceTool()
         self.stock_tool = StockDataTool()
         self.news_tool = NewsTool()
+        self.time_tool = TimeTool()
 
         # 注册工具
         self._register_tools()
@@ -131,6 +134,19 @@ class InvestmentAgent(BaseAgent):
         )
         self.register_tool(news_tool)
 
+        # 时间工具
+        time_tool = Tool(
+            name="get_current_time",
+            description="获取当前服务器时间，返回日期、星期、时间戳等信息，无需参数",
+            parameters={
+                "type": "object",
+                "properties": {},
+                "required": []
+            },
+            handler=self._handle_current_time
+        )
+        self.register_tool(time_tool)
+
     async def _handle_gold_price(self, **kwargs) -> dict:
         """处理黄金价格查询"""
         result = await self.gold_tool.get_current_price()
@@ -145,6 +161,10 @@ class InvestmentAgent(BaseAgent):
         """处理新闻搜索"""
         result = await self.news_tool.search_financial_news(query=query)
         return result
+
+    def _handle_current_time(self, **kwargs) -> dict:
+        """处理时间查询"""
+        return self.time_tool.get_current_time()
 
     async def run(self, input_text: str, **kwargs) -> str:
         """
