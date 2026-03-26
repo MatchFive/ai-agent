@@ -107,7 +107,21 @@ async def chat_stream(
         try:
             # 流式响应
             async for chunk in agent.run_stream(request.message):
-                # SSE 格式
+                # 检查是否为状态事件
+                try:
+                    event = json.loads(chunk)
+                    if isinstance(event, dict) and event.get("type") == "status":
+                        status_data = json.dumps({
+                            "type": "status",
+                            "content": event["content"],
+                            "conversation_id": conversation_id
+                        }, ensure_ascii=False)
+                        yield f"data: {status_data}\n\n"
+                        continue
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+                # 普通内容
                 data = json.dumps({
                     "content": chunk,
                     "conversation_id": conversation_id

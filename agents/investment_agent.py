@@ -4,6 +4,7 @@
 
 from typing import Optional, AsyncGenerator
 import json
+import asyncio
 
 from agents.base import BaseAgent, Tool
 from core.llm import LLMClient
@@ -297,6 +298,10 @@ class InvestmentAgent(BaseAgent):
     ) -> AsyncGenerator[str, None]:
         """
         流式运行 Agent
+
+        yield 格式:
+        - 普通文本: 直接 yield 字符串（LLM 内容）
+        - 状态事件: yield JSON 字符串 {"type": "status", "content": "..."}
         """
         # 添加用户消息到记忆
         await self.memory.add_user_message(input_text)
@@ -316,6 +321,11 @@ class InvestmentAgent(BaseAgent):
             # 将 LLM 的首次回复加入上下文
             await self.memory.add_assistant_message(llm_response.content)
 
+            # 发送工具调用状态事件
+            tool_names = [t[0] for t in tools_to_call]
+            yield json.dumps({"type": "status", "content": f"正在查询: {', '.join(tool_names)}"}, ensure_ascii=False)
+            await asyncio.sleep(0)
+
             # 执行工具
             for tool_name, tool_args in tools_to_call:
                 tool_result = await self.execute_tool(tool_name, **tool_args)
@@ -325,6 +335,10 @@ class InvestmentAgent(BaseAgent):
                     await self.memory.add_user_message(tool_message)
                 else:
                     await self.memory.add_user_message(f"[工具 {tool_name} 执行失败] {tool_result.error}")
+
+            # 发送分析状态事件
+            yield json.dumps({"type": "status", "content": "正在分析数据..."}, ensure_ascii=False)
+            await asyncio.sleep(0)
 
             # 更新上下文
             context = await self.memory.get_context()
@@ -342,9 +356,15 @@ class InvestmentAgent(BaseAgent):
             # 添加完整响应到记忆
             await self.memory.add_assistant_message(full_response)
         else:
-            # 不需要工具，直接流式输出首次回复
-            yield llm_response.content
-            await self.memory.add_assistant_message(llm_response.content)
+            # 不需要工具，逐块流式输出首次回复
+            content = llm_response.content
+            chunk_size = 2
+            for i in range(0, len(content), chunk_size):
+                yield content[i:i + chunk_size]
+                if i % 20 == 0:
+                    await asyncio.sleep(0)
+
+            await self.memory.add_assistant_message(content)
 
     async def cleanup(self):
         """清理资源"""

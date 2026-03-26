@@ -6,7 +6,8 @@ export const useChatStore = defineStore('chat', {
     messages: [],  // [{ role, content, timestamp }]
     conversationId: null,
     isLoading: false,
-    error: null
+    error: null,
+    statusText: '正在分析中...'
   }),
 
   getters: {
@@ -36,6 +37,7 @@ export const useChatStore = defineStore('chat', {
 
       this.isLoading = true
       this.error = null
+      this.statusText = '正在分析中...'
 
       return new Promise((resolve, reject) => {
         agentApi.chatStream(
@@ -44,6 +46,7 @@ export const useChatStore = defineStore('chat', {
           // onMessage
           (chunk, conversationId) => {
             assistantMessage.content += chunk
+            this.statusText = '正在回复...'
             if (conversationId && !this.conversationId) {
               this.conversationId = conversationId
             }
@@ -57,7 +60,12 @@ export const useChatStore = defineStore('chat', {
           // onDone
           () => {
             this.isLoading = false
+            this.statusText = '正在分析中...'
             resolve()
+          },
+          // onStatus
+          (status) => {
+            this.statusText = status
           }
         )
       })
@@ -118,6 +126,7 @@ export const useChatStore = defineStore('chat', {
       this.conversationId = null
       this.isLoading = false
       this.error = null
+      this.statusText = '正在分析中...'
     }
   }
 })

@@ -45,7 +45,7 @@ export const agentApi = {
   /**
    * 流式对话
    */
-  chatStream: async (message, conversationId, onMessage, onError, onDone) => {
+  chatStream: async (message, conversationId, onMessage, onError, onDone, onStatus) => {
     const token = localStorage.getItem('token')
 
     try {
@@ -90,6 +90,8 @@ export const agentApi = {
               const parsed = JSON.parse(data)
               if (parsed.error) {
                 onError(parsed.error)
+              } else if (parsed.type === 'status') {
+                if (onStatus) onStatus(parsed.content)
               } else if (parsed.content) {
                 onMessage(parsed.content, parsed.conversation_id)
               }

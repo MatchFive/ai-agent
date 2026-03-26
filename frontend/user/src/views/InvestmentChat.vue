@@ -70,13 +70,13 @@
           </div>
 
           <!-- Loading 指示器 -->
-          <div v-if="chatStore.isLoading" class="loading-indicator">
+          <div v-if="chatStore.isLoading && !chatStore.messages[chatStore.messages.length - 1]?.content" class="loading-indicator">
             <div class="typing-animation">
               <span></span>
               <span></span>
               <span></span>
             </div>
-            <span>正在分析中...</span>
+            <span>{{ chatStore.statusText }}</span>
           </div>
 
           <!-- 错误提示 -->
@@ -201,6 +201,7 @@ const handleSend = async () => {
       // onMessage
       (chunk, conversationId) => {
         assistantMessage.content += chunk
+        chatStore.statusText = '正在回复...'
         if (conversationId) {
           chatStore.conversationId = conversationId
         }
@@ -211,11 +212,17 @@ const handleSend = async () => {
       (error) => {
         chatStore.error = error
         chatStore.isLoading = false
+        chatStore.statusText = '正在分析中...'
       },
       // onDone
       () => {
         chatStore.isLoading = false
+        chatStore.statusText = '正在分析中...'
         nextTick(() => scrollToBottom())
+      },
+      // onStatus
+      (status) => {
+        chatStore.statusText = status
       }
     )
   } catch (error) {
