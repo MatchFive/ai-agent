@@ -118,8 +118,6 @@ async def close_db():
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """获取数据库会话（用于依赖注入）"""
-    global _async_session_factory
-
     if _async_session_factory is None:
         await init_db()
 
@@ -129,6 +127,11 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+
+def get_session_factory():
+    """获取异步会话工厂（供其他模块使用）"""
+    return _async_session_factory
 
 
 async def create_default_admin():

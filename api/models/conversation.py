@@ -10,7 +10,7 @@ from typing import List, Optional
 from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.user import Base, _async_session_factory
+from api.models.user import Base, get_session_factory
 from core.memory import BaseMemory, MemoryItem
 from core.logger import logger
 
@@ -38,9 +38,10 @@ class DatabaseStorage(BaseMemory):
 
     async def _get_session(self) -> AsyncSession:
         """获取数据库会话"""
-        if _async_session_factory is None:
+        factory = get_session_factory()
+        if factory is None:
             raise RuntimeError("数据库未初始化，请先调用 init_db()")
-        return _async_session_factory()
+        return factory()
 
     async def _load_conversation(self, session: AsyncSession) -> Conversation:
         """加载或创建对话记录"""
