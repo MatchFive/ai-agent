@@ -28,44 +28,6 @@ class AgentChatResponse(BaseModel):
     tools_used: List[str] = Field(default_factory=list, description="使用的工具列表")
 
 
-class GoldPriceData(BaseModel):
-    """黄金价格数据"""
-    price: float = Field(..., description="价格")
-    currency: str = Field(default="USD", description="货币")
-    change: Optional[float] = Field(default=None, description="涨跌额")
-    change_percent: Optional[float] = Field(default=None, description="涨跌幅")
-    timestamp: str = Field(..., description="时间戳")
-    source: str = Field(..., description="数据来源")
-
-
-class StockData(BaseModel):
-    """股票数据"""
-    symbol: str = Field(..., description="股票代码")
-    name: Optional[str] = Field(default=None, description="公司名称")
-    price: float = Field(..., description="当前价格")
-    change: Optional[float] = Field(default=None, description="涨跌额")
-    change_percent: Optional[float] = Field(default=None, description="涨跌幅")
-    volume: Optional[int] = Field(default=None, description="成交量")
-    timestamp: str = Field(..., description="时间戳")
-    source: str = Field(..., description="数据来源")
-
-
-class NewsItem(BaseModel):
-    """新闻条目"""
-    title: str = Field(..., description="标题")
-    source: str = Field(..., description="来源")
-    url: str = Field(..., description="链接")
-    published_at: str = Field(..., description="发布时间")
-    summary: Optional[str] = Field(default=None, description="摘要")
-
-
-class NewsResponse(BaseModel):
-    """新闻响应"""
-    articles: List[NewsItem] = Field(..., description="新闻列表")
-    total: int = Field(..., description="总数")
-    source: str = Field(..., description="数据来源")
-
-
 class AgentInfo(BaseModel):
     """Agent 信息"""
     name: str = Field(..., description="Agent名称")

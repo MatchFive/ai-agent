@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import json
 import asyncio
 
-from agents.base import BaseAgent, Tool, ToolResult
+from agents.base import BaseAgent
 from core.llm import LLMClient
 from core.memory import Memory
 from core.logger import logger
@@ -33,10 +33,12 @@ class InvestmentAgent(BaseAgent):
         description: str = "投资理财分析助手，提供黄金、股票市场分析和投资建议",
         llm_client: Optional[LLMClient] = None,
         memory: Optional[Memory] = None,
+        system_prompt: Optional[str] = None,
         **kwargs
     ):
-        # 系统提示词
-        system_prompt = """你是一位专业的投资理财分析助手。你的职责是：
+        # 系统提示词（优先使用外部传入的，兼容 DB 动态配置）
+        if not system_prompt:
+            system_prompt = """你是一位专业的投资理财分析助手。你的职责是：
 
 1. **市场分析**: 分析黄金、股票等金融产品的走势
 2. **新闻解读**: 结合最新的财经新闻和政策动态
@@ -75,80 +77,10 @@ class InvestmentAgent(BaseAgent):
             **kwargs
         )
 
-        # 初始化工具实例
+        # 初始化工具实例（供 _detect_tool_calls 中的兜底检测使用）
         self.gold_tool = GoldPriceTool()
         self.stock_tool = StockDataTool()
         self.news_tool = NewsTool()
-
-        # 注册工具
-        self._register_tools()
-
-    def _register_tools(self):
-        """注册投资分析工具"""
-
-        # 黄金价格工具
-        gold_tool = Tool(
-            name="get_gold_price",
-            description="获取当前黄金价格（美元/盎司），无需参数",
-            parameters={
-                "type": "object",
-                "properties": {},
-                "required": []
-            },
-            handler=self._handle_gold_price
-        )
-        self.register_tool(gold_tool)
-
-        # 股票查询工具
-        stock_tool = Tool(
-            name="get_stock_quote",
-            description="获取股票实时报价。参数: symbol (股票代码，如 AAPL, TSLA)",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "symbol": {
-                        "type": "string",
-                        "description": "股票代码，如 AAPL, TSLA, GOOGL"
-                    }
-                },
-                "required": ["symbol"]
-            },
-            handler=self._handle_stock_quote
-        )
-        self.register_tool(stock_tool)
-
-        # 新闻搜索工具
-        news_tool = Tool(
-            name="search_news",
-            description="搜索财经新闻。参数: query (搜索关键词，可选，默认为金融相关)",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "搜索关键词，如 'gold', 'stock', 'china economy'"
-                    }
-                },
-                "required": []
-            },
-            handler=self._handle_news_search
-        )
-        self.register_tool(news_tool)
-
-    async def _handle_gold_price(self, **kwargs) -> dict:
-        """处理黄金价格查询"""
-        result = await self.gold_tool.get_current_price()
-        return result
-
-    async def _handle_stock_quote(self, symbol: str, **kwargs) -> dict:
-        """处理股票查询"""
-        result = await self.stock_tool.get_quote(symbol)
-        return result
-
-    async def _handle_news_search(self, query: str = "gold OR stock OR investment", **kwargs) -> dict:
-        """处理新闻搜索"""
-        result = await self.news_tool.search_financial_news(query=query)
-        return result
 
     def _inject_time(self, input_text: str) -> str:
         """在用户消息中注入当前时间"""

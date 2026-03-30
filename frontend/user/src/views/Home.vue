@@ -19,7 +19,7 @@
     <div class="app-body">
       <!-- 左侧 Agent 列表 -->
       <aside class="sidebar">
-        <AgentSidebar v-model="selectedAgent" :agents="agentList" />
+        <AgentSidebar v-model="selectedAgent" :agents="agentList" :loading="agentLoading" />
       </aside>
 
       <!-- 右侧面板 -->
@@ -35,8 +35,8 @@
           </div>
         </div>
 
-        <!-- 选中 Agent 的聊天界面 -->
-        <InvestmentChat v-else-if="selectedAgent === 'investment'" :key="selectedAgent" />
+        <!-- 通用聊天界面 -->
+        <ChatPanel v-else :key="selectedAgent" :agent-info="currentAgentInfo" />
       </main>
     </div>
 
@@ -46,34 +46,43 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Connection, ArrowDown } from '@element-plus/icons-vue'
-import { TrendCharts } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
+import { agentApi } from '../api/agent'
 import AgentSidebar from '../components/AgentSidebar.vue'
+import ChatPanel from '../components/ChatPanel.vue'
 import UserModal from '../components/UserModal.vue'
-import InvestmentChat from './InvestmentChat.vue'
 
 const userStore = useUserStore()
 
 const selectedAgent = ref(null)
 const showUserModal = ref(false)
+const agentList = ref([])
+const agentLoading = ref(true)
 
-// Agent 列表（数据驱动，后续扩展只需添加对象）
-const agentList = [
-  {
-    id: 'investment',
-    name: '投资理财',
-    icon: 'TrendCharts',
-    description: '提供黄金、股票市场分析和投资建议',
-    color: '#667eea'
+const currentAgentInfo = computed(() => {
+  const agent = agentList.value.find(a => a.name === selectedAgent.value)
+  return agent || { name: selectedAgent.value, description: '' }
+})
+
+const fetchAgentList = async () => {
+  agentLoading.value = true
+  try {
+    const res = await agentApi.getList()
+    agentList.value = res.items || []
+  } catch (e) {
+    console.error('获取 Agent 列表失败:', e)
+  } finally {
+    agentLoading.value = false
   }
-]
+}
 
 onMounted(() => {
   if (!userStore.user) {
     userStore.fetchUser()
   }
+  fetchAgentList()
 })
 </script>
 

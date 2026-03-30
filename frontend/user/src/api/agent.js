@@ -28,28 +28,35 @@ api.interceptors.response.use(
 
 export const agentApi = {
   /**
+   * 获取所有可用 Agent 列表
+   */
+  getList: () => api.get('/agent/list'),
+
+  /**
    * 获取 Agent 信息
    */
-  getInfo: () => api.get('/agent/info'),
+  getInfo: (agentName) => api.get('/agent/info', { params: { agent_name: agentName } }),
 
   /**
    * 非流式对话
    */
-  chat: (message, conversationId = null) =>
+  chat: (message, conversationId = null, agentName = null) =>
     api.post('/agent/chat', {
       message,
       stream: false,
       conversation_id: conversationId
-    }),
+    }, { params: agentName ? { agent_name: agentName } : {} }),
 
   /**
    * 流式对话
    */
-  chatStream: async (message, conversationId, onMessage, onError, onDone, onStatus) => {
+  chatStream: async (message, conversationId, onMessage, onError, onDone, onStatus, agentName = null) => {
     const token = localStorage.getItem('token')
 
+    const params = agentName ? `?agent_name=${encodeURIComponent(agentName)}` : ''
+
     try {
-      const response = await fetch('/api/agent/chat/stream', {
+      const response = await fetch(`/api/agent/chat/stream${params}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -109,14 +116,14 @@ export const agentApi = {
   /**
    * 重置对话
    */
-  reset: (conversationId = null) => api.post('/agent/reset', {
+  reset: (conversationId = null, agentName = null) => api.post('/agent/reset', {
     conversation_id: conversationId
-  }),
+  }, { params: agentName ? { agent_name: agentName } : {} }),
 
   /**
    * 获取工具列表
    */
-  getTools: () => api.get('/agent/tools')
+  getTools: (agentName) => api.get('/agent/tools', { params: agentName ? { agent_name: agentName } : {} })
 }
 
 export default api

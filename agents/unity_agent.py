@@ -7,7 +7,7 @@ from typing import AsyncGenerator
 import json
 import asyncio
 
-from agents.base import BaseAgent, Tool
+from agents.base import BaseAgent
 from core.logger import logger
 
 

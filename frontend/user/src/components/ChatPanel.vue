@@ -3,8 +3,8 @@
     <!-- 聊天面板顶栏 -->
     <div class="chat-header">
       <div class="chat-title">
-        <el-icon :size="20" color="#667eea"><TrendCharts /></el-icon>
-        <span>投资理财分析助手</span>
+        <div class="title-icon">{{ agentInfo.name.charAt(0) }}</div>
+        <span>{{ agentInfo.description }}</span>
       </div>
       <el-button
         text
@@ -20,14 +20,9 @@
     <div class="chat-messages" ref="messagesContainer">
       <!-- 欢迎消息 -->
       <div v-if="chatStore.messages.length === 0" class="welcome-message">
-        <el-icon :size="48" color="#667eea"><TrendCharts /></el-icon>
-        <h3>欢迎使用投资理财分析助手</h3>
-        <p>我可以帮您分析黄金、股票等投资产品的走势</p>
-        <div class="quick-actions">
-          <el-button @click="sendQuickMessage('黄金现在多少钱？')">黄金价格</el-button>
-          <el-button @click="sendQuickMessage('苹果股票怎么样？')">苹果股票</el-button>
-          <el-button @click="sendQuickMessage('最近有什么财经新闻？')">财经新闻</el-button>
-        </div>
+        <div class="welcome-icon">{{ agentInfo.name.charAt(0) }}</div>
+        <h3>欢迎使用{{ agentInfo.description }}</h3>
+        <p>{{ agentInfo.description }}，请输入您的问题</p>
       </div>
 
       <!-- 消息列表 -->
@@ -43,7 +38,7 @@
           >
             <el-icon :size="16"><component :is="message.role === 'user' ? User : ChatDotRound" /></el-icon>
           </el-avatar>
-          <span class="role-name">{{ message.role === 'user' ? '我' : '投资助手' }}</span>
+          <span class="role-name">{{ message.role === 'user' ? '我' : agentInfo.description }}</span>
           <span class="timestamp">{{ formatTime(message.timestamp) }}</span>
         </div>
         <div class="message-content" v-html="renderMarkdown(message.content)"></div>
@@ -78,7 +73,7 @@
           v-model="inputMessage"
           type="textarea"
           :rows="2"
-          placeholder="输入您的投资问题，例如：黄金现在多少钱？"
+          placeholder="输入您的问题..."
           @keydown.enter.ctrl="handleSend"
           :disabled="chatStore.isLoading"
           resize="none"
@@ -101,16 +96,28 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, nextTick, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { User, ChatDotRound, TrendCharts } from '@element-plus/icons-vue'
+import { User, ChatDotRound } from '@element-plus/icons-vue'
 import { useChatStore } from '../store/chat'
 import { agentApi } from '../api/agent'
+
+const props = defineProps({
+  agentInfo: {
+    type: Object,
+    required: true
+  }
+})
 
 const chatStore = useChatStore()
 
 const inputMessage = ref('')
 const messagesContainer = ref(null)
+
+// 切换 agent 时重置对话状态
+watch(() => props.agentInfo.name, () => {
+  chatStore.reset()
+})
 
 // 简单的 Markdown 渲染
 const renderMarkdown = (content) => {
@@ -177,17 +184,13 @@ const handleSend = async () => {
       },
       (status) => {
         chatStore.statusText = status
-      }
+      },
+      props.agentInfo.name
     )
   } catch (error) {
     chatStore.error = error.message
     chatStore.isLoading = false
   }
-}
-
-const sendQuickMessage = (message) => {
-  inputMessage.value = message
-  handleSend()
 }
 
 const handleClearChat = async () => {
@@ -197,7 +200,7 @@ const handleClearChat = async () => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await chatStore.clearChat()
+    await chatStore.clearChat(props.agentInfo.name)
     ElMessage.success('对话已清空')
   } catch {
     // 用户取消
@@ -249,16 +252,24 @@ onMounted(() => {
   color: #333;
 }
 
+.title-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 /* 消息区域 */
 .chat-messages {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
-}
-
-.messages-container {
-  max-width: 800px;
-  margin: 0 auto;
 }
 
 .welcome-message {
@@ -267,20 +278,28 @@ onMounted(() => {
   color: #666;
 }
 
+.welcome-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
 .welcome-message h3 {
-  margin: 20px 0 10px;
+  margin: 0 0 10px;
   color: #333;
 }
 
 .welcome-message p {
-  margin-bottom: 30px;
-}
-
-.quick-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  flex-wrap: wrap;
+  margin-bottom: 0;
+  font-size: 14px;
 }
 
 /* 消息卡片 */
