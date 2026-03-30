@@ -24,9 +24,11 @@ class UnityAgent(BaseAgent):
         llm_client=None,
         memory=None,
         knowledge_base: str = "Unity手册",
+        system_prompt: str = None,
         **kwargs
     ):
-        system_prompt = """你是 Unity 入门小助手，专门帮助初学者学习 Unity 游戏引擎。
+        if not system_prompt:
+            system_prompt = """你是 Unity 入门小助手，专门帮助初学者学习 Unity 游戏引擎。
 
 **你的知识来源**：
 - 你可以访问 Unity 使用手册知识库
