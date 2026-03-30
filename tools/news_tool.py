@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import json
 
 from loguru import logger
+from tools.registry import register_method_tool
 
 # 工具专用logger，输出到 logs/tools_*.log
 tool_logger = logger.bind(category="tool")
@@ -53,6 +54,19 @@ class NewsTool:
     def __init__(self):
         self.http_client = HttpTool(timeout=10.0)
 
+    @register_method_tool(
+        name="search_news",
+        description="搜索财经新闻，可指定关键词",
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "搜索关键词", "default": "黄金 OR 股票 OR 投资 OR 财经"},
+                "page_size": {"type": "integer", "description": "返回条数", "default": 10}
+            },
+            "required": []
+        },
+        category="finance"
+    )
     async def search_financial_news(
         self,
         query: str = "黄金 OR 股票 OR 投资 OR 财经",
@@ -267,6 +281,19 @@ class NewsTool:
             "note": "模拟数据，请检查网络连接获取实时新闻"
         }
 
+    @register_method_tool(
+        name="search_news_by_topic",
+        description="按主题搜索新闻（支持: 黄金, 股票, 加密货币, 经济, 中国）",
+        parameters={
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "主题关键词"},
+                "page_size": {"type": "integer", "description": "返回条数", "default": 5}
+            },
+            "required": ["topic"]
+        },
+        category="finance"
+    )
     async def search_by_topic(
         self,
         topic: str,

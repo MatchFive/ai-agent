@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 import httpx
 
 from core.logger import logger
+from tools.registry import register_method_tool
 
 
 class HttpTool:
@@ -106,6 +107,20 @@ class HttpTool:
             logger.error(f"HTTP unexpected error: {e}")
             return {"success": False, "error": str(e)}
 
+    @register_method_tool(
+        name="http_get",
+        description="发送HTTP GET请求",
+        parameters={
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "请求URL"},
+                "params": {"type": "object", "description": "查询参数"},
+                "headers": {"type": "object", "description": "请求头"}
+            },
+            "required": ["url"]
+        },
+        category="http"
+    )
     async def get(
         self,
         url: str,
@@ -116,6 +131,21 @@ class HttpTool:
         """GET请求"""
         return await self.request("GET", url, params=params, headers=headers, **kwargs)
 
+    @register_method_tool(
+        name="http_post",
+        description="发送HTTP POST请求",
+        parameters={
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "请求URL"},
+                "json_data": {"type": "object", "description": "JSON请求体"},
+                "data": {"type": "string", "description": "表单数据"},
+                "headers": {"type": "object", "description": "请求头"}
+            },
+            "required": ["url"]
+        },
+        category="http"
+    )
     async def post(
         self,
         url: str,
@@ -133,6 +163,20 @@ class HttpTool:
             **kwargs
         )
 
+    @register_method_tool(
+        name="http_put",
+        description="发送HTTP PUT请求",
+        parameters={
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "请求URL"},
+                "json_data": {"type": "object", "description": "JSON请求体"},
+                "headers": {"type": "object", "description": "请求头"}
+            },
+            "required": ["url"]
+        },
+        category="http"
+    )
     async def put(
         self,
         url: str,
@@ -150,6 +194,19 @@ class HttpTool:
             **kwargs
         )
 
+    @register_method_tool(
+        name="http_delete",
+        description="发送HTTP DELETE请求",
+        parameters={
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "请求URL"},
+                "headers": {"type": "object", "description": "请求头"}
+            },
+            "required": ["url"]
+        },
+        category="http"
+    )
     async def delete(
         self,
         url: str,
@@ -176,6 +233,19 @@ class HttpTool:
             **kwargs
         )
 
+    @register_method_tool(
+        name="http_download",
+        description="下载文件到指定路径",
+        parameters={
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "文件URL"},
+                "save_path": {"type": "string", "description": "保存路径"}
+            },
+            "required": ["url", "save_path"]
+        },
+        category="http"
+    )
     async def download(
         self,
         url: str,

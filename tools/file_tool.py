@@ -11,6 +11,7 @@ import aiofiles
 import aiofiles.os
 
 from core.logger import logger
+from tools.registry import register_method_tool
 
 
 class FileTool:
@@ -29,6 +30,19 @@ class FileTool:
             p = self.base_path / p
         return p.resolve()
 
+    @register_method_tool(
+        name="file_read",
+        description="读取文件内容",
+        parameters={
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "文件路径"},
+                "encoding": {"type": "string", "description": "编码格式", "default": "utf-8"}
+            },
+            "required": ["file_path"]
+        },
+        category="file"
+    )
     async def read_file(
         self,
         file_path: str,
@@ -63,6 +77,21 @@ class FileTool:
             logger.error(f"Failed to read file {path}: {e}")
             return {"success": False, "error": str(e)}
 
+    @register_method_tool(
+        name="file_write",
+        description="写入文件内容",
+        parameters={
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "文件路径"},
+                "content": {"type": "string", "description": "写入内容"},
+                "encoding": {"type": "string", "description": "编码格式", "default": "utf-8"},
+                "mode": {"type": "string", "description": "写入模式: w=覆盖, a=追加", "default": "w"}
+            },
+            "required": ["file_path", "content"]
+        },
+        category="file"
+    )
     async def write_file(
         self,
         file_path: str,
@@ -101,6 +130,18 @@ class FileTool:
             logger.error(f"Failed to write file {path}: {e}")
             return {"success": False, "error": str(e)}
 
+    @register_method_tool(
+        name="file_read_json",
+        description="读取JSON文件",
+        parameters={
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "文件路径"}
+            },
+            "required": ["file_path"]
+        },
+        category="file"
+    )
     async def read_json(self, file_path: str) -> Dict[str, Any]:
         """读取JSON文件"""
         result = await self.read_file(file_path)
@@ -111,6 +152,20 @@ class FileTool:
                 return {"success": False, "error": f"Invalid JSON: {e}"}
         return result
 
+    @register_method_tool(
+        name="file_write_json",
+        description="写入JSON文件",
+        parameters={
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "文件路径"},
+                "data": {"type": "object", "description": "JSON数据"},
+                "indent": {"type": "integer", "description": "缩进空格数", "default": 2}
+            },
+            "required": ["file_path", "data"]
+        },
+        category="file"
+    )
     async def write_json(
         self,
         file_path: str,
@@ -124,6 +179,18 @@ class FileTool:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    @register_method_tool(
+        name="file_delete",
+        description="删除文件",
+        parameters={
+            "type": "object",
+            "properties": {
+                "file_path": {"type": "string", "description": "文件路径"}
+            },
+            "required": ["file_path"]
+        },
+        category="file"
+    )
     async def delete_file(self, file_path: str) -> Dict[str, Any]:
         """删除文件"""
         path = self._resolve_path(file_path)
@@ -138,6 +205,19 @@ class FileTool:
             logger.error(f"Failed to delete file {path}: {e}")
             return {"success": False, "error": str(e)}
 
+    @register_method_tool(
+        name="file_list_directory",
+        description="列出目录内容",
+        parameters={
+            "type": "object",
+            "properties": {
+                "dir_path": {"type": "string", "description": "目录路径", "default": "."},
+                "pattern": {"type": "string", "description": "匹配模式（支持通配符）", "default": "*"}
+            },
+            "required": []
+        },
+        category="file"
+    )
     async def list_directory(
         self,
         dir_path: str = ".",
@@ -172,6 +252,18 @@ class FileTool:
             logger.error(f"Failed to list directory {path}: {e}")
             return {"success": False, "error": str(e)}
 
+    @register_method_tool(
+        name="file_create_directory",
+        description="创建目录（含父目录）",
+        parameters={
+            "type": "object",
+            "properties": {
+                "dir_path": {"type": "string", "description": "目录路径"}
+            },
+            "required": ["dir_path"]
+        },
+        category="file"
+    )
     async def create_directory(self, dir_path: str) -> Dict[str, Any]:
         """创建目录"""
         path = self._resolve_path(dir_path)

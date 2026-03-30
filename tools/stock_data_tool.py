@@ -8,6 +8,7 @@ from datetime import datetime
 import json
 
 from loguru import logger
+from tools.registry import register_method_tool
 
 # 工具专用logger，输出到 logs/tools_*.log
 tool_logger = logger.bind(category="tool")
@@ -53,6 +54,18 @@ class StockDataTool:
     def __init__(self):
         self.http_client = HttpTool(timeout=10.0)
 
+    @register_method_tool(
+        name="get_stock_quote",
+        description="获取股票实时报价，参数: symbol（股票代码，如 AAPL, TSLA, sh600519）",
+        parameters={
+            "type": "object",
+            "properties": {
+                "symbol": {"type": "string", "description": "股票代码，如 AAPL, TSLA, GOOGL, sh600519"}
+            },
+            "required": ["symbol"]
+        },
+        category="finance"
+    )
     async def get_quote(self, symbol: str) -> Dict[str, Any]:
         """获取股票实时报价"""
         tool_logger.info(f"[股票数据] 开始查询 | symbol={symbol}")
@@ -266,6 +279,22 @@ class StockDataTool:
             "note": "模拟数据，请检查网络连接获取实时数据"
         }
 
+    @register_method_tool(
+        name="get_multiple_stock_quotes",
+        description="批量获取多只股票的实时报价",
+        parameters={
+            "type": "object",
+            "properties": {
+                "symbols": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "股票代码列表"
+                }
+            },
+            "required": ["symbols"]
+        },
+        category="finance"
+    )
     async def get_multiple_quotes(self, symbols: List[str]) -> Dict[str, Any]:
         """批量获取股票报价"""
         results = {}

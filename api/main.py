@@ -10,7 +10,7 @@ from core.config import settings
 from core.logger import logger
 from api.models.user import init_db, close_db
 from core.redis import close_redis
-from api.routers import auth_router, admin_router
+from api.routers import auth_router, admin_router, admin_tools_router
 from api.routers.agent import router as agent_router
 
 
@@ -21,6 +21,13 @@ async def lifespan(app: FastAPI):
     logger.info("Starting AI-Agent API...")
     logger.info(f"Database: {settings.db_host}:{settings.db_port}/{settings.db_database}")
     await init_db()
+
+    # 工具扫描与同步
+    from core.startup import import_tools, sync_tools_to_db, seed_default_agents, load_agents_from_db
+    import_tools()
+    await sync_tools_to_db()
+    await seed_default_agents()
+    await load_agents_from_db()
 
     yield
 
@@ -50,6 +57,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(auth_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
+app.include_router(admin_tools_router, prefix="/api")
 app.include_router(agent_router, prefix="/api")
 
 

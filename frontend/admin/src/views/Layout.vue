@@ -24,6 +24,14 @@
           <el-icon><User /></el-icon>
           <span>用户管理</span>
         </el-menu-item>
+        <el-menu-item index="/tools">
+          <el-icon><Tools /></el-icon>
+          <span>工具管理</span>
+        </el-menu-item>
+        <el-menu-item index="/agents">
+          <el-icon><Connection /></el-icon>
+          <span>Agent管理</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -61,7 +69,9 @@ const pageTitle = computed(() => {
   const titles = {
     '/dashboard': '仪表盘',
     '/invite-codes': '邀请码管理',
-    '/users': '用户管理'
+    '/users': '用户管理',
+    '/tools': '工具管理',
+    '/agents': 'Agent管理'
   }
   return titles[route.path] || '管理后台'
 })

@@ -44,7 +44,24 @@ export const adminApi = {
 
   // 用户
   getUsers: (params) => api.get('/admin/users', { params }),
-  toggleUserActive: (id) => api.post(`/admin/users/${id}/toggle-active`)
+  toggleUserActive: (id) => api.post(`/admin/users/${id}/toggle-active`),
+
+  // 工具管理
+  getTools: () => api.get('/admin/tools'),
+  reloadTools: () => api.post('/admin/tools/reload'),
+  getTool: (id) => api.get(`/admin/tools/${id}`),
+  updateTool: (id, data) => api.put(`/admin/tools/${id}`, data),
+  toggleTool: (id) => api.patch(`/admin/tools/${id}`),
+
+  // Agent管理
+  getAgents: () => api.get('/admin/agents'),
+  getAgent: (id) => api.get(`/admin/agents/${id}`),
+  createAgent: (data) => api.post('/admin/agents', data),
+  updateAgent: (id, data) => api.put(`/admin/agents/${id}`, data),
+  toggleAgent: (id) => api.patch(`/admin/agents/${id}`),
+  deleteAgent: (id) => api.delete(`/admin/agents/${id}`),
+  setAgentTools: (agentId, toolIds) => api.post(`/admin/agents/${agentId}/tools`, { tool_ids: toolIds }),
+  removeAgentTool: (agentId, toolId) => api.delete(`/admin/agents/${agentId}/tools/${toolId}`)
 }
 
 export default api

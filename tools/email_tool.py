@@ -14,6 +14,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from core.config import settings
 from core.logger import logger
+from tools.registry import register_method_tool
 
 
 class EmailContent(BaseModel):
@@ -140,6 +141,21 @@ class EmailTool:
                 "error": str(e)
             }
 
+    @register_method_tool(
+        name="send_email",
+        description="发送邮件（支持HTML、附件、抄送）",
+        parameters={
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "收件人邮箱"},
+                "subject": {"type": "string", "description": "邮件主题"},
+                "body": {"type": "string", "description": "邮件正文"},
+                "html": {"type": "boolean", "description": "是否HTML格式", "default": False}
+            },
+            "required": ["to", "subject", "body"]
+        },
+        category="communication"
+    )
     async def send_async(self, content: EmailContent) -> dict:
         """异步发送邮件（当前为同步包装）"""
         import asyncio
@@ -147,6 +163,20 @@ class EmailTool:
         return await loop.run_in_executor(None, self.send, content)
 
     # 便捷方法
+    @register_method_tool(
+        name="send_text_email",
+        description="发送纯文本邮件",
+        parameters={
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "收件人邮箱"},
+                "subject": {"type": "string", "description": "邮件主题"},
+                "body": {"type": "string", "description": "邮件正文"}
+            },
+            "required": ["to", "subject", "body"]
+        },
+        category="communication"
+    )
     def send_text(
         self,
         to: Union[str, List[str]],

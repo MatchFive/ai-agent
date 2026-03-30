@@ -23,6 +23,7 @@ except ImportError:
 
 from core.config import settings
 from core.logger import logger
+from tools.registry import register_method_tool
 
 
 class SchedulerTool:
@@ -68,6 +69,19 @@ class SchedulerTool:
 
         return self._scheduler
 
+    @register_method_tool(
+        name="scheduler_add_cron",
+        description="添加cron定时任务",
+        parameters={
+            "type": "object",
+            "properties": {
+                "job_id": {"type": "string", "description": "任务ID"},
+                "cron_expr": {"type": "string", "description": "cron表达式（5段）", "example": "0 9 * * *"}
+            },
+            "required": ["job_id", "cron_expr"]
+        },
+        category="scheduler"
+    )
     def add_cron_job(
         self,
         job_id: str,
@@ -121,6 +135,21 @@ class SchedulerTool:
             "next_run": str(job.next_run_time) if job.next_run_time else None
         }
 
+    @register_method_tool(
+        name="scheduler_add_interval",
+        description="添加间隔执行任务",
+        parameters={
+            "type": "object",
+            "properties": {
+                "job_id": {"type": "string", "description": "任务ID"},
+                "seconds": {"type": "integer", "description": "间隔秒数", "default": 0},
+                "minutes": {"type": "integer", "description": "间隔分钟", "default": 0},
+                "hours": {"type": "integer", "description": "间隔小时", "default": 0}
+            },
+            "required": ["job_id"]
+        },
+        category="scheduler"
+    )
     def add_interval_job(
         self,
         job_id: str,
@@ -210,6 +239,18 @@ class SchedulerTool:
             "run_date": str(run_date),
         }
 
+    @register_method_tool(
+        name="scheduler_remove_job",
+        description="移除定时任务",
+        parameters={
+            "type": "object",
+            "properties": {
+                "job_id": {"type": "string", "description": "任务ID"}
+            },
+            "required": ["job_id"]
+        },
+        category="scheduler"
+    )
     def remove_job(self, job_id: str) -> bool:
         """
         移除任务
@@ -267,6 +308,12 @@ class SchedulerTool:
             }
         return None
 
+    @register_method_tool(
+        name="scheduler_list_jobs",
+        description="列出所有定时任务",
+        parameters={"type": "object", "properties": {}, "required": []},
+        category="scheduler"
+    )
     def list_jobs(self) -> List[Dict[str, Any]]:
         """列出所有任务"""
         scheduler = self._get_scheduler()

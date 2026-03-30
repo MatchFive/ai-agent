@@ -17,38 +17,28 @@ from api.schemas.agent import (
 )
 from api.models.conversation import DatabaseStorage
 from agents.manager import agent_manager
-from agents.investment_agent import InvestmentAgent
+from agents.base import BaseAgent
 from core.logger import logger
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
 
-# 全局 Agent 实例
-_investment_agent: InvestmentAgent = None
+def get_agent(agent_name: str = "InvestmentAgent") -> BaseAgent:
+    """从 agent_manager 获取 Agent 实例"""
+    agent = agent_manager.get(agent_name)
+    if agent is None:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' 未找到或未启用")
+    return agent
 
 
-async def get_investment_agent() -> InvestmentAgent:
-    """获取投资分析 Agent 实例（单例）"""
-    global _investment_agent
-
-    if _investment_agent is None:
-        _investment_agent = InvestmentAgent()
-        agent_manager.register(_investment_agent)
-        logger.info("InvestmentAgent initialized and registered")
-
-    return _investment_agent
-
-
-def _setup_conversation(agent: InvestmentAgent, conversation_id: str, user_id: int = None):
+def _setup_conversation(agent: BaseAgent, conversation_id: str, user_id: int = None):
     """设置 Agent 使用数据库存储的指定会话"""
     storage = DatabaseStorage(conversation_id, user_id=user_id)
     agent.memory.set_storage(storage)
 
 
 @router.get("/info", response_model=AgentInfo, summary="获取Agent信息")
-async def get_agent_info(
-    agent: InvestmentAgent = Depends(get_investment_agent)
-):
+async def get_agent_info(agent: BaseAgent = Depends(get_agent)):
     """获取当前 Agent 的信息"""
     return AgentInfo(
         name=agent.name,
@@ -57,14 +47,21 @@ async def get_agent_info(
     )
 
 
+@router.get("/list", summary="获取所有可用Agent")
+async def list_agents():
+    """获取所有已注册的 Agent 列表"""
+    agents = agent_manager.list_agents()
+    return {"items": agents, "total": len(agents)}
+
+
 @router.post("/chat", response_model=AgentChatResponse, summary="对话（非流式）")
 async def chat(
     request: AgentChatRequest,
     current_user: User = Depends(get_current_user),
-    agent: InvestmentAgent = Depends(get_investment_agent)
+    agent: BaseAgent = Depends(get_agent)
 ):
     """
-    与投资分析 Agent 对话（非流式）
+    与 Agent 对话（非流式）
 
     - message: 用户消息
     - stream: 是否流式响应（此处为 false）
@@ -74,7 +71,7 @@ async def chat(
         # 生成或使用现有会话 ID
         conversation_id = request.conversation_id or str(uuid.uuid4())
 
-        logger.info(f"User {current_user.username} chatting with agent, conversation: {conversation_id}")
+        logger.info(f"User {current_user.username} chatting with {agent.name}, conversation: {conversation_id}")
 
         # 设置数据库存储
         _setup_conversation(agent, conversation_id, user_id=current_user.id)
@@ -88,7 +85,7 @@ async def chat(
                 role="assistant",
                 content=response
             ),
-            tools_used=[]  # 可以扩展追踪使用的工具
+            tools_used=[]
         )
     except Exception as e:
         logger.error(f"Agent chat error: {e}")
@@ -99,10 +96,10 @@ async def chat(
 async def chat_stream(
     request: AgentChatRequest,
     current_user: User = Depends(get_current_user),
-    agent: InvestmentAgent = Depends(get_investment_agent)
+    agent: BaseAgent = Depends(get_agent)
 ):
     """
-    与投资分析 Agent 对话（流式 SSE）
+    与 Agent 对话（流式 SSE）
 
     返回 Server-Sent Events 流：
     - data: {"content": "...", "conversation_id": "..."}
@@ -110,7 +107,7 @@ async def chat_stream(
     """
     conversation_id = request.conversation_id or str(uuid.uuid4())
 
-    logger.info(f"User {current_user.username} streaming chat, conversation: {conversation_id}")
+    logger.info(f"User {current_user.username} streaming chat with {agent.name}, conversation: {conversation_id}")
 
     # 设置数据库存储
     _setup_conversation(agent, conversation_id, user_id=current_user.id)
@@ -164,7 +161,7 @@ async def chat_stream(
 async def reset_conversation(
     request: AgentChatRequest = None,
     current_user: User = Depends(get_current_user),
-    agent: InvestmentAgent = Depends(get_investment_agent)
+    agent: BaseAgent = Depends(get_agent)
 ):
     """
     重置对话，清空记忆（同时清除数据库记录）
@@ -175,7 +172,7 @@ async def reset_conversation(
             _setup_conversation(agent, request.conversation_id, user_id=current_user.id)
 
         await agent.reset()
-        logger.info(f"User {current_user.username} reset conversation")
+        logger.info(f"User {current_user.username} reset conversation with {agent.name}")
         return {"message": "对话已重置", "success": True}
     except Exception as e:
         logger.error(f"Reset error: {e}")
@@ -185,7 +182,7 @@ async def reset_conversation(
 @router.get("/tools", summary="获取可用工具列表")
 async def list_tools(
     current_user: User = Depends(get_current_user),
-    agent: InvestmentAgent = Depends(get_investment_agent)
+    agent: BaseAgent = Depends(get_agent)
 ):
     """获取 Agent 可用的工具列表"""
     tools = []

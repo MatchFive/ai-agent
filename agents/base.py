@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any, Callable, AsyncGenerator
 from pydantic import BaseModel, Field
 from enum import Enum
+import json
+import hashlib
 
 from core.llm import LLMClient, LLMResponse
 from core.memory import Memory
@@ -52,6 +54,7 @@ class BaseAgent(ABC):
         memory: Optional[Memory] = None,
         tools: Optional[List[Tool]] = None,
         system_prompt: Optional[str] = None,
+        cache_ttl: int = 900,
         **kwargs
     ):
         self.name = name
@@ -60,6 +63,7 @@ class BaseAgent(ABC):
         self.memory = memory or Memory(system_prompt=system_prompt)
         self.tools: Dict[str, Tool] = {}
         self.status = AgentStatus.IDLE
+        self.cache_ttl = cache_ttl
         self.config = kwargs
 
         # 注册工具
@@ -98,29 +102,50 @@ class BaseAgent(ABC):
         ]
 
     async def execute_tool(self, tool_name: str, **kwargs) -> ToolResult:
-        """执行工具"""
+        """执行工具（带 Redis 缓存）"""
+        # 尝试从缓存读取
+        if self.cache_ttl > 0:
+            try:
+                from core.redis import get_redis
+                redis = await get_redis()
+                args_str = json.dumps(kwargs, sort_keys=True, ensure_ascii=False)
+                cache_key = f"tool:{self.name}:{tool_name}:{hashlib.md5(args_str.encode()).hexdigest()}"
+                cached = await redis.get(cache_key)
+                if cached:
+                    logger.info(f"[工具缓存命中] {tool_name} | args={kwargs}")
+                    return ToolResult(success=True, result=json.loads(cached))
+            except Exception as e:
+                logger.warning(f"[Redis] 缓存读取失败，降级为直接执行: {e}")
+
+        # 执行工具
         tool = self.get_tool(tool_name)
         if not tool:
-            return ToolResult(
-                success=False,
-                result=None,
-                error=f"Tool '{tool_name}' not found"
-            )
+            return ToolResult(success=False, result=None, error=f"Tool '{tool_name}' not found")
 
         if not tool.handler:
-            return ToolResult(
-                success=False,
-                result=None,
-                error=f"Tool '{tool_name}' has no handler"
-            )
+            return ToolResult(success=False, result=None, error=f"Tool '{tool_name}' has no handler")
 
         try:
             logger.info(f"Executing tool '{tool_name}' with args: {kwargs}")
             result = await tool.handler(**kwargs) if callable(tool.handler) else tool.handler
-            return ToolResult(success=True, result=result)
+            tool_result = ToolResult(success=True, result=result)
         except Exception as e:
             logger.error(f"Tool execution failed: {e}")
-            return ToolResult(success=False, result=None, error=str(e))
+            tool_result = ToolResult(success=False, result=None, error=str(e))
+
+        # 缓存成功结果
+        if tool_result.success and self.cache_ttl > 0:
+            try:
+                from core.redis import get_redis
+                redis = await get_redis()
+                args_str = json.dumps(kwargs, sort_keys=True, ensure_ascii=False)
+                cache_key = f"tool:{self.name}:{tool_name}:{hashlib.md5(args_str.encode()).hexdigest()}"
+                await redis.setex(cache_key, self.cache_ttl, json.dumps(tool_result.result, ensure_ascii=False))
+                logger.info(f"[工具缓存写入] {tool_name} | TTL={self.cache_ttl}s")
+            except Exception as e:
+                logger.warning(f"[Redis] 缓存写入失败: {e}")
+
+        return tool_result
 
     @abstractmethod
     async def run(self, input_text: str, **kwargs) -> str:
@@ -202,3 +227,35 @@ class BaseAgent(ABC):
         await self.memory.clear()
         self.status = AgentStatus.IDLE
         logger.info(f"Agent '{self.name}' reset")
+
+    @classmethod
+    async def load_from_db(cls, agent_row, tool_registrations: list) -> 'BaseAgent':
+        """
+        从数据库配置创建Agent实例
+
+        Args:
+            agent_row: AgentConfig ORM 对象
+            tool_registrations: ToolRegistration 对象列表
+        """
+        config = json.loads(agent_row.config_json or "{}")
+        cache_ttl = config.pop("cache_ttl", 900)
+
+        instance = cls(
+            name=agent_row.name,
+            description=agent_row.description,
+            system_prompt=agent_row.system_prompt,
+            cache_ttl=cache_ttl,
+            **config
+        )
+
+        # 注册工具
+        for reg in tool_registrations:
+            tool = Tool(
+                name=reg.name,
+                description=reg.description,
+                parameters=reg.parameters,
+                handler=reg.execute
+            )
+            instance.register_tool(tool)
+
+        return instance

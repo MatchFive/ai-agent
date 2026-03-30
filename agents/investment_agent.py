@@ -6,7 +6,6 @@ from typing import Optional, AsyncGenerator
 from datetime import datetime, timezone
 import json
 import asyncio
-import hashlib
 
 from agents.base import BaseAgent, Tool, ToolResult
 from core.llm import LLMClient
@@ -157,43 +156,6 @@ class InvestmentAgent(BaseAgent):
         weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
         time_tag = f"[当前时间: {now.strftime('%Y-%m-%d %H:%M:%S')} {weekdays[now.weekday()]}]"
         return f"{time_tag}\n{input_text}"
-
-    async def execute_tool(self, tool_name: str, **kwargs) -> ToolResult:
-        """执行工具（带 Redis 缓存）"""
-        try:
-            from core.redis import get_redis
-            redis = await get_redis()
-
-            # 生成缓存 key
-            args_str = json.dumps(kwargs, sort_keys=True, ensure_ascii=False)
-            cache_key = f"tool:{tool_name}:{hashlib.md5(args_str.encode()).hexdigest()}"
-
-            # 检查缓存
-            cached = await redis.get(cache_key)
-            if cached:
-                logger.info(f"[工具缓存命中] {tool_name} | args={kwargs}")
-                return ToolResult(success=True, result=json.loads(cached))
-        except Exception as e:
-            logger.warning(f"[Redis] 缓存读取失败，降级为直接执行: {e}")
-
-        # 执行工具
-        result = await super().execute_tool(tool_name, **kwargs)
-
-        # 缓存成功结果（15分钟过期）
-        if result.success:
-            try:
-                from core.redis import get_redis
-                redis = await get_redis()
-                await redis.setex(
-                    cache_key,
-                    900,  # 15分钟
-                    json.dumps(result.result, ensure_ascii=False)
-                )
-                logger.info(f"[工具缓存写入] {tool_name} | TTL=900s")
-            except Exception as e:
-                logger.warning(f"[Redis] 缓存写入失败: {e}")
-
-        return result
 
     async def run(self, input_text: str, **kwargs) -> str:
         """

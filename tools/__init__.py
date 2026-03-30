@@ -9,6 +9,7 @@ from .http_tool import HttpTool
 from .gold_price_tool import GoldPriceTool
 from .stock_data_tool import StockDataTool
 from .news_tool import NewsTool
+from .registry import ToolRegistry, ToolRegistration, register_tool, register_method_tool, scan_classes_for_method_tools
 
 __all__ = [
     "EmailTool",
@@ -18,4 +19,9 @@ __all__ = [
     "GoldPriceTool",
     "StockDataTool",
     "NewsTool",
+    "ToolRegistry",
+    "ToolRegistration",
+    "register_tool",
+    "register_method_tool",
+    "scan_classes_for_method_tools",
 ]

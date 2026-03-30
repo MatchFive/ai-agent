@@ -8,6 +8,7 @@ from datetime import datetime
 import json
 
 from loguru import logger
+from tools.registry import register_tool
 
 # 工具专用logger，输出到 logs/tools_*.log
 tool_logger = logger.bind(category="tool")
@@ -43,6 +44,13 @@ class HttpTool:
         pass
 
 
+@register_tool(
+    name="get_gold_price",
+    description="获取当前黄金价格（美元/盎司），无需参数",
+    parameters={"type": "object", "properties": {}, "required": []},
+    category="finance",
+    method_name="get_current_price"
+)
 class GoldPriceTool:
     """
     黄金价格查询工具
