@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from api.models.user import User, get_session
-from api.models.agent_config import AgentConfig, ToolConfig, AgentToolConfig
+from api.models.agent_config import AgentConfig, ToolConfig, AgentToolConfig, KnowledgeBase
 from api.schemas.admin_tools import (
     ToolConfigResponse,
     ToolConfigUpdate,
@@ -15,6 +15,9 @@ from api.schemas.admin_tools import (
     AgentConfigUpdate,
     AgentConfigResponse,
     ToolAssignmentRequest,
+    KnowledgeBaseCreate,
+    KnowledgeBaseUpdate,
+    KnowledgeBaseResponse,
 )
 from api.deps import get_current_admin
 from core.logger import logger
@@ -406,3 +409,133 @@ async def remove_agent_tool(
     await session.commit()
 
     return {"message": "工具关联已移除"}
+
+
+# ==================== 知识库管理 ====================
+
+@router.get("/knowledge-bases", summary="获取知识库列表")
+async def list_knowledge_bases(
+    current_admin: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session)
+):
+    """获取所有知识库"""
+    result = await session.execute(
+        select(KnowledgeBase).order_by(KnowledgeBase.created_at.desc())
+    )
+    items = result.scalars().all()
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/knowledge-bases", summary="创建知识库")
+async def create_knowledge_base(
+    data: KnowledgeBaseCreate,
+    current_admin: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session)
+):
+    """创建知识库"""
+    existing = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.name == data.name)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="知识库名称已存在")
+
+    kb = KnowledgeBase(
+        name=data.name,
+        description=data.description,
+        collection_name=data.collection_name,
+        embedding_dim=data.embedding_dim,
+    )
+    session.add(kb)
+    await session.commit()
+    await session.refresh(kb)
+
+    logger.info(f"知识库 '{data.name}' created by admin {current_admin.username}")
+    return KnowledgeBaseResponse.model_validate(kb)
+
+
+@router.get("/knowledge-bases/{kb_id}", summary="获取知识库详情")
+async def get_knowledge_base(
+    kb_id: int,
+    current_admin: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session)
+):
+    """获取知识库详情"""
+    result = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    )
+    kb = result.scalar_one_or_none()
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="知识库不存在")
+    return KnowledgeBaseResponse.model_validate(kb)
+
+
+@router.put("/knowledge-bases/{kb_id}", summary="更新知识库")
+async def update_knowledge_base(
+    kb_id: int,
+    data: KnowledgeBaseUpdate,
+    current_admin: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session)
+):
+    """更新知识库配置"""
+    result = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    )
+    kb = result.scalar_one_or_none()
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="知识库不存在")
+
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(kb, field, value)
+
+    await session.commit()
+    await session.refresh(kb)
+
+    logger.info(f"知识库 '{kb.name}' updated by admin {current_admin.username}")
+    return KnowledgeBaseResponse.model_validate(kb)
+
+
+@router.patch("/knowledge-bases/{kb_id}", summary="启用/禁用知识库")
+async def toggle_knowledge_base(
+    kb_id: int,
+    current_admin: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session)
+):
+    """启用或禁用知识库"""
+    result = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    )
+    kb = result.scalar_one_or_none()
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="知识库不存在")
+
+    kb.is_active = not kb.is_active
+    await session.commit()
+    await session.refresh(kb)
+
+    return {
+        "message": f"知识库已{'启用' if kb.is_active else '禁用'}",
+        "is_active": kb.is_active
+    }
+
+
+@router.delete("/knowledge-bases/{kb_id}", summary="删除知识库")
+async def delete_knowledge_base(
+    kb_id: int,
+    current_admin: User = Depends(get_current_admin),
+    session: AsyncSession = Depends(get_session)
+):
+    """删除知识库"""
+    result = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    )
+    kb = result.scalar_one_or_none()
+    if not kb:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="知识库不存在")
+
+    kb_name = kb.name
+    await session.delete(kb)
+    await session.commit()
+
+    logger.info(f"知识库 '{kb_name}' deleted by admin {current_admin.username}")
+    return {"message": "知识库已删除"}

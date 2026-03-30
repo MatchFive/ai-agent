@@ -21,6 +21,7 @@ def import_tools():
     import tools.file_tool
     import tools.http_tool
     import tools.scheduler_tool
+    import tools.rag_tool
 
     # 收集方法级装饰器
     scan_classes_for_method_tools()
@@ -84,22 +85,59 @@ async def sync_tools_to_db():
 
 
 async def seed_default_agents():
-    """如果 DB 中没有 InvestmentAgent，插入默认配置"""
+    """如果 DB 中没有默认数据，插入配置"""
     from api.models.user import get_session_factory
-    from api.models.agent_config import AgentConfig, ToolConfig, AgentToolConfig
+    from api.models.agent_config import AgentConfig, ToolConfig, AgentToolConfig, KnowledgeBase
 
     factory = get_session_factory()
     if factory is None:
         return
 
     async with factory() as session:
+        # ---- 默认知识库 ----
+        result = await session.execute(
+            select(KnowledgeBase).where(KnowledgeBase.name == "Unity手册")
+        )
+        if not result.scalar_one_or_none():
+            await _seed_knowledge_base(session)
+            logger.info("[Seed] 默认知识库 'Unity手册' 配置已创建")
+
+        # ---- InvestmentAgent ----
         result = await session.execute(
             select(AgentConfig).where(AgentConfig.name == "InvestmentAgent")
         )
-        if result.scalar_one_or_none():
-            return
+        if not result.scalar_one_or_none():
+            await _seed_investment_agent(session)
+            logger.info("[Seed] 默认 InvestmentAgent 配置已创建")
 
-        system_prompt = """你是一位专业的投资理财分析助手。你的职责是：
+        # ---- UnityAgent ----
+        result = await session.execute(
+            select(AgentConfig).where(AgentConfig.name == "UnityAgent")
+        )
+        if not result.scalar_one_or_none():
+            await _seed_unity_agent(session)
+            logger.info("[Seed] 默认 UnityAgent 配置已创建")
+
+
+async def _seed_knowledge_base(session):
+    """种子数据：默认知识库"""
+    from api.models.agent_config import KnowledgeBase
+
+    kb = KnowledgeBase(
+        name="Unity手册",
+        description="Unity 2022.3 LTS 版本使用手册",
+        collection_name="unity_docs_2022_3",
+        embedding_dim=1024,
+        is_active=True,
+    )
+    session.add(kb)
+
+
+async def _seed_investment_agent(session):
+    """种子数据：InvestmentAgent"""
+    from api.models.agent_config import AgentConfig, ToolConfig, AgentToolConfig
+
+    system_prompt = """你是一位专业的投资理财分析助手。你的职责是：
 
 1. **市场分析**: 分析黄金、股票等金融产品的走势
 2. **新闻解读**: 结合最新的财经新闻和政策动态
@@ -128,36 +166,78 @@ async def seed_default_agents():
 
 请始终以专业、客观、负责任的态度为用户提供服务。"""
 
-        agent = AgentConfig(
-            name="InvestmentAgent",
-            description="投资理财分析助手，提供黄金、股票市场分析和投资建议",
-            system_prompt=system_prompt,
-            agent_class="agents.investment_agent.InvestmentAgent",
-            is_active=True,
-            config_json=json.dumps({"cache_ttl": 900}),
+    agent = AgentConfig(
+        name="InvestmentAgent",
+        description="投资理财分析助手，提供黄金、股票市场分析和投资建议",
+        system_prompt=system_prompt,
+        agent_class="agents.investment_agent.InvestmentAgent",
+        is_active=True,
+        config_json=json.dumps({"cache_ttl": 900}),
+    )
+    session.add(agent)
+    await session.flush()
+
+    for tool_name, sort_order in [
+        ("get_gold_price", 0),
+        ("get_stock_quote", 1),
+        ("search_news", 2),
+    ]:
+        result = await session.execute(
+            select(ToolConfig).where(ToolConfig.name == tool_name)
         )
-        session.add(agent)
-        await session.flush()
+        tool = result.scalar_one_or_none()
+        if tool:
+            session.add(AgentToolConfig(
+                agent_id=agent.id,
+                tool_id=tool.id,
+                sort_order=sort_order,
+            ))
 
-        # 关联默认工具
-        for tool_name, sort_order in [
-            ("get_gold_price", 0),
-            ("get_stock_quote", 1),
-            ("search_news", 2),
-        ]:
-            result = await session.execute(
-                select(ToolConfig).where(ToolConfig.name == tool_name)
-            )
-            tool = result.scalar_one_or_none()
-            if tool:
-                session.add(AgentToolConfig(
-                    agent_id=agent.id,
-                    tool_id=tool.id,
-                    sort_order=sort_order,
-                ))
 
-        await session.commit()
-        logger.info("[Seed] 默认 InvestmentAgent 配置已创建")
+async def _seed_unity_agent(session):
+    """种子数据：UnityAgent"""
+    from api.models.agent_config import AgentConfig, ToolConfig, AgentToolConfig
+
+    system_prompt = """你是 Unity 入门小助手，专门帮助初学者学习 Unity 游戏引擎。
+
+**你的知识来源**：
+- 你可以访问 Unity 使用手册知识库
+- 每次回答前，你会先从知识库中检索相关文档片段
+
+**回答规范**：
+1. 始终基于检索到的文档内容回答，不要凭空编造
+2. 如果检索结果中没有相关信息，诚实告知用户并建议换个关键词
+3. 回答要结构清晰、通俗易懂，适合初学者
+4. 涉及代码的部分给出示例代码
+5. 适当给出操作步骤指引
+6. 回复使用中文
+
+**注意事项**：
+- 不要声称自己是官方文档，你是基于文档的 AI 助手
+- 如果用户的问题与 Unity 无关，礼貌地告知你只回答 Unity 相关问题
+- 保持耐心和友好的语气"""
+
+    agent = AgentConfig(
+        name="UnityAgent",
+        description="Unity 入门小助手，基于 2022.3 版 Unity 使用手册提供学习指导",
+        system_prompt=system_prompt,
+        agent_class="agents.unity_agent.UnityAgent",
+        is_active=True,
+        config_json=json.dumps({"cache_ttl": 0, "knowledge_base": "Unity手册"}),
+    )
+    session.add(agent)
+    await session.flush()
+
+    result = await session.execute(
+        select(ToolConfig).where(ToolConfig.name == "rag_search")
+    )
+    tool = result.scalar_one_or_none()
+    if tool:
+        session.add(AgentToolConfig(
+            agent_id=agent.id,
+            tool_id=tool.id,
+            sort_order=0,
+        ))
 
 
 async def load_agents_from_db():

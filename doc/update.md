@@ -1,6 +1,72 @@
 # 更新日志
 
-## 2026-03-30: Agent/Tool 动态配置化
+## 2026-03-30: RAG 知识库通用化改造
+
+### 实现方案
+将 RAG 知识库从全局单一 collection 改为数据库多知识库管理，新增 knowledge_bases 表和 Admin CRUD 接口，rag_search 工具按知识库名称检索对应 Milvus collection。
+
+### 变更内容
+
+#### 修改文件
+- `api/models/agent_config.py` — 新增 KnowledgeBase 表（name、description、collection_name、embedding_dim、is_active）
+- `tools/rag_tool.py` — 参数新增 knowledge_base（必需），运行时查 DB 获取 collection_name
+- `core/vectorstore.py` — search() 的 collection_name 改为必传参数，不再从 settings 读默认值
+- `core/config.py` — 删除 milvus_collection 配置项（collection 现在按知识库维度管理）
+- `api/schemas/admin_tools.py` — 新增 KnowledgeBaseCreate/Update/Response schemas
+- `api/routers/admin_tools.py` — 新增知识库 CRUD 接口（6 个）
+- `core/startup.py` — 新增 seed 默认知识库记录（Unity手册），UnityAgent config_json 加入 knowledge_base
+- `agents/unity_agent.py` — 新增 knowledge_base 属性，run/run_stream 传 knowledge_base 参数
+
+#### 新增数据库表
+- `knowledge_bases` — 知识库配置（name、description、collection_name、embedding_dim、is_active）
+
+#### 新增 API 接口
+- `GET /api/admin/knowledge-bases` — 列出所有知识库
+- `POST /api/admin/knowledge-bases` — 创建知识库
+- `GET /api/admin/knowledge-bases/{id}` — 知识库详情
+- `PUT /api/admin/knowledge-bases/{id}` — 更新知识库
+- `PATCH /api/admin/knowledge-bases/{id}` — 启用/禁用知识库
+- `DELETE /api/admin/knowledge-bases/{id}` — 删除知识库
+
+#### RAG 链路变更
+- 旧流程：rag_search(query) → 从 settings 读 milvus_collection → 搜索
+- 新流程：rag_search(knowledge_base, query) → 查 DB 获取 collection_name → 搜索
+
+## 2026-03-31: Unity 入门小助手（RAG Agent）
+
+### 实现方案
+基于 Milvus 向量数据库 + Embedding 服务 + LLM 实现 RAG 知识问答链路，创建 Unity 入门小助手 Agent。
+
+### 变更内容
+
+#### 新增文件
+- `core/embedding.py` — Embedding 客户端（OpenAI 兼容接口，支持批量调用）
+- `core/vectorstore.py` — Milvus 向量存储客户端（连接、搜索）
+- `tools/rag_tool.py` — RAG 知识库检索工具（@register_tool 装饰器，category="rag"）
+- `agents/unity_agent.py` — Unity 入门小助手 Agent（继承 BaseAgent，实现 RAG 流程）
+
+#### 修改文件
+- `core/config.py` — 添加 Embedding 配置（base_url、model、batch_size）和 Milvus 配置（host、port、collection、dim）
+- `core/startup.py` — import_tools 加入 rag_tool；seed_default_agents 加入 UnityAgent 种子数据
+- `requirements.txt` — 添加 pymilvus>=2.3.0
+- `develop.md` — 更新项目结构
+
+#### RAG 链路流程
+1. 用户提问 → RAGSearchTool.search()
+2. query → EmbeddingClient.embed_single() → 向量
+3. 向量 → VectorStore.search() → Milvus COSINE 搜索 top_k=5
+4. 检索文档 + 用户问题 → 注入上下文 → LLM 生成回答
+
+#### 新增工具
+- rag_search (category="rag") — 参数: query(必需), top_k(默认5)
+
+#### 新增 Agent
+- UnityAgent — 系统提示词引导为 Unity 入门助手，每次请求先检索再回答，cache_ttl=0（RAG 不缓存）
+
+#### 依赖
+- pymilvus>=2.3.0
+- Embedding 服务: Qwen3-Embedding-0.6B (OpenAI 兼容接口，本地 8000 端口)
+- Milvus: localhost:19530，已有 collection unity_docs_2022_3
 
 ### 实现方案
 将 Agent 的系统提示词和可用工具从硬编码改为数据库配置，通过装饰器自动发现工具。

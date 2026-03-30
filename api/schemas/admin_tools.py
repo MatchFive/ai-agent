@@ -76,3 +76,35 @@ class AgentConfigResponse(BaseModel):
 class ToolAssignmentRequest(BaseModel):
     """工具关联请求"""
     tool_ids: List[int] = Field(..., description="工具ID列表")
+
+
+# ==================== KnowledgeBase Schemas ====================
+
+class KnowledgeBaseCreate(BaseModel):
+    """创建知识库"""
+    name: str = Field(..., min_length=1, max_length=100, description="知识库名称")
+    description: str = Field(default="", max_length=500, description="知识库描述")
+    collection_name: str = Field(..., min_length=1, max_length=200, description="Milvus collection名")
+    embedding_dim: int = Field(default=1024, description="向量维度")
+
+
+class KnowledgeBaseUpdate(BaseModel):
+    """更新知识库"""
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    description: Optional[str] = None
+    collection_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    embedding_dim: Optional[int] = None
+
+
+class KnowledgeBaseResponse(BaseModel):
+    """知识库响应"""
+    id: int
+    name: str
+    description: str
+    collection_name: str
+    embedding_dim: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

@@ -78,3 +78,17 @@ class AgentToolConfig(Base):
     __table_args__ = (
         UniqueConstraint("agent_id", "tool_id", name="uq_agent_tool"),
     )
+
+
+class KnowledgeBase(Base):
+    """知识库表"""
+    __tablename__ = "knowledge_bases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, index=True, nullable=False, comment="知识库名称")
+    description = Column(String(500), nullable=False, default="", comment="知识库描述")
+    collection_name = Column(String(200), nullable=False, comment="Milvus collection名")
+    embedding_dim = Column(Integer, nullable=False, default=1024, comment="向量维度")
+    is_active = Column(Boolean, default=True, nullable=False, comment="是否启用")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

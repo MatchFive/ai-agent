@@ -26,6 +26,9 @@ loguru>=0.7.2
 # Redis
 redis>=5.0.0
 
+# Vector Store
+pymilvus>=2.3.0
+
 # Async
 asyncio-throttle>=1.0
 aiofiles>=24.1.0

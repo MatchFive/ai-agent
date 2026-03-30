@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     # Redis配置
     redis_url: str = Field(default="redis://localhost:6379/0", description="Redis连接URL")
 
+    # Embedding 配置
+    embedding_base_url: str = Field(default="http://localhost:8000/v1/embeddings", description="Embedding服务地址")
+    embedding_model: str = Field(default="/models/Qwen/Qwen3-Embedding-0___6B/", description="Embedding模型")
+    embedding_batch_size: int = Field(default=128, description="Embedding批量大小")
+
+    # Milvus 配置
+    milvus_host: str = Field(default="localhost", description="Milvus地址")
+    milvus_port: int = Field(default=19530, description="Milvus端口")
+    milvus_dim: int = Field(default=1024, description="向量维度")
+
     # 数据库配置 - MySQL
     db_host: str = Field(default="localhost")
     db_port: int = Field(default=3306)
