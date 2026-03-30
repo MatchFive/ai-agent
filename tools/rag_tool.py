@@ -118,7 +118,7 @@ class RAGSearchTool:
                     select(KnowledgeBase.collection_name).where(
                         KnowledgeBase.name == knowledge_base,
                         KnowledgeBase.is_active == True
-                    )
+                    ))
                 row = result.scalar_one_or_none()
                 return row if row else None
         except Exception:
