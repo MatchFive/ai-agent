@@ -118,6 +118,8 @@ async def seed_default_agents():
             await _seed_unity_agent(session)
             logger.info("[Seed] 默认 UnityAgent 配置已创建")
 
+        await session.commit()
+
 
 async def _seed_knowledge_base(session):
     """种子数据：默认知识库"""
@@ -131,6 +133,7 @@ async def _seed_knowledge_base(session):
         is_active=True,
     )
     session.add(kb)
+    await session.commit()
 
 
 async def _seed_investment_agent(session):
