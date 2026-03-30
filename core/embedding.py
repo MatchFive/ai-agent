@@ -28,6 +28,7 @@ class EmbeddingClient:
             import openai
             self._client = openai.AsyncOpenAI(
                 base_url=settings.embedding_base_url,
+                api_key="",
             )
         return self._client
 
