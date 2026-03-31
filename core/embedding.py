@@ -50,9 +50,11 @@ class EmbeddingClient:
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
             try:
+                embedding_logger.info(f"base_url:{client.base_url},model_name:{settings.embedding_model}")
                 response = await client.embeddings.create(
                     input=batch,
                     model=settings.embedding_model,
+                    timeout=30,
                 )
                 batch_embeddings = [item.embedding for item in response.data]
                 all_embeddings.extend(batch_embeddings)
