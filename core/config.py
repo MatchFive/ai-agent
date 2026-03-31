@@ -52,6 +52,7 @@ class Settings(BaseSettings):
 
     # Embedding 配置
     embedding_base_url: str = Field(default="http://localhost:8000/v1/embeddings", description="Embedding服务地址")
+    embedding_api_key: str = Field(default="not_needed",description="embedding api key")
     embedding_model: str = Field(default="/models/Qwen/Qwen3-Embedding-0___6B/", description="Embedding模型")
     embedding_batch_size: int = Field(default=128, description="Embedding批量大小")
 
