@@ -2,20 +2,26 @@
 Agent 对话路由
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 import json
 
-from api.models.user import User
+from api.models.user import User, get_session
 from api.deps import get_current_user
 from api.schemas.agent import (
     AgentChatRequest,
     AgentChatResponse,
     ChatMessage,
-    AgentInfo
+    AgentInfo,
+    ConversationListItem,
+    ConversationDetail,
+    ConversationListResponse,
+    UpdateTitleRequest,
 )
-from api.models.conversation import DatabaseStorage
+from api.models.conversation import DatabaseStorage, Conversation
 from agents.manager import agent_manager
 from agents.base import BaseAgent
 from core.logger import logger
@@ -31,9 +37,9 @@ def get_agent(agent_name: str = "InvestmentAgent") -> BaseAgent:
     return agent
 
 
-def _setup_conversation(agent: BaseAgent, conversation_id: str, user_id: int = None):
+def _setup_conversation(agent: BaseAgent, conversation_id: str, user_id: int = None, agent_name: str = None):
     """设置 Agent 使用数据库存储的指定会话"""
-    storage = DatabaseStorage(conversation_id, user_id=user_id)
+    storage = DatabaseStorage(conversation_id, user_id=user_id, agent_name=agent_name)
     agent.memory.set_storage(storage)
 
 
@@ -74,7 +80,7 @@ async def chat(
         logger.info(f"User {current_user.username} chatting with {agent.name}, conversation: {conversation_id}")
 
         # 设置数据库存储
-        _setup_conversation(agent, conversation_id, user_id=current_user.id)
+        _setup_conversation(agent, conversation_id, user_id=current_user.id, agent_name=agent.name)
 
         # 调用 Agent
         response = await agent.run(request.message)
@@ -110,7 +116,7 @@ async def chat_stream(
     logger.info(f"User {current_user.username} streaming chat with {agent.name}, conversation: {conversation_id}")
 
     # 设置数据库存储
-    _setup_conversation(agent, conversation_id, user_id=current_user.id)
+    _setup_conversation(agent, conversation_id, user_id=current_user.id, agent_name=agent.name)
 
     async def event_generator():
         """SSE 事件生成器"""
@@ -194,3 +200,125 @@ async def list_tools(
         })
 
     return {"tools": tools}
+
+
+# ==================== 对话历史管理 ====================
+
+@router.get("/conversations", summary="获取对话历史列表")
+async def list_conversations(
+    agent_name: str = Query(..., description="Agent名称"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=50, description="每页数量"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """获取当前用户与指定 Agent 的对话历史列表"""
+    query = select(Conversation).where(
+        Conversation.user_id == current_user.id,
+        Conversation.agent_name == agent_name,
+    ).order_by(Conversation.updated_at.desc())
+
+    # 计算总数
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await session.execute(count_query)).scalar() or 0
+
+    # 分页
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await session.execute(query)
+    conversations = result.scalars().all()
+
+    items = []
+    for conv in conversations:
+        try:
+            messages = json.loads(conv.messages)
+            msg_count = len(messages)
+        except (json.JSONDecodeError, TypeError):
+            msg_count = 0
+        items.append(ConversationListItem(
+            conversation_id=conv.conversation_id,
+            title=conv.title or "新对话",
+            agent_name=conv.agent_name,
+            message_count=msg_count,
+            created_at=conv.created_at,
+            updated_at=conv.updated_at,
+        ))
+
+    return ConversationListResponse(items=items, total=total)
+
+
+@router.get("/conversations/{conversation_id}", summary="获取对话详情")
+async def get_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """获取指定对话的完整消息内容"""
+    result = await session.execute(
+        select(Conversation).where(
+            Conversation.conversation_id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=404, detail="对话不存在")
+
+    try:
+        raw_messages = json.loads(conv.messages)
+        messages = [ChatMessage(**m) for m in raw_messages]
+    except (json.JSONDecodeError, TypeError):
+        messages = []
+
+    return ConversationDetail(
+        conversation_id=conv.conversation_id,
+        title=conv.title or "新对话",
+        agent_name=conv.agent_name,
+        messages=messages,
+        created_at=conv.created_at,
+        updated_at=conv.updated_at,
+    )
+
+
+@router.delete("/conversations/{conversation_id}", summary="删除对话")
+async def delete_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """删除指定对话"""
+    result = await session.execute(
+        select(Conversation).where(
+            Conversation.conversation_id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=404, detail="对话不存在")
+
+    await session.delete(conv)
+    await session.commit()
+    return {"message": "对话已删除", "success": True}
+
+
+@router.put("/conversations/{conversation_id}/title", summary="更新对话标题")
+async def update_conversation_title(
+    conversation_id: str,
+    body: UpdateTitleRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """更新对话标题"""
+    result = await session.execute(
+        select(Conversation).where(
+            Conversation.conversation_id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+    conv = result.scalar_one_or_none()
+    if not conv:
+        raise HTTPException(status_code=404, detail="对话不存在")
+
+    conv.title = body.title
+    await session.commit()
+    return {"message": "标题已更新", "success": True}

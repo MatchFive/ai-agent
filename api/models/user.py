@@ -87,6 +87,23 @@ async def init_db():
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # 兼容已有表：检查并添加缺失的列
+    try:
+        from sqlalchemy import inspect as sa_inspect, text
+        async with _engine.begin() as conn:
+            def _get_columns(sync_conn):
+                insp = sa_inspect(sync_conn)
+                if 'conversations' in insp.get_table_names():
+                    return [col['name'] for col in insp.get_columns('conversations')]
+                return []
+            columns = await conn.run_sync(_get_columns)
+            if 'agent_name' not in columns:
+                await conn.execute(text("ALTER TABLE conversations ADD COLUMN agent_name VARCHAR(100) DEFAULT NULL"))
+            if 'title' not in columns:
+                await conn.execute(text("ALTER TABLE conversations ADD COLUMN title VARCHAR(255) DEFAULT '新对话'"))
+    except Exception as e:
+        logger.warning(f"数据库列迁移跳过: {e}")
+
     logger.info("Database tables created")
 
     # 创建默认管理员

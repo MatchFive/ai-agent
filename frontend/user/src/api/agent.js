@@ -123,7 +123,31 @@ export const agentApi = {
   /**
    * 获取工具列表
    */
-  getTools: (agentName) => api.get('/agent/tools', { params: agentName ? { agent_name: agentName } : {} })
+  getTools: (agentName) => api.get('/agent/tools', { params: agentName ? { agent_name: agentName } : {} }),
+
+  /**
+   * 获取对话历史列表
+   */
+  getConversations: (agentName, page = 1, pageSize = 20) =>
+    api.get('/agent/conversations', { params: { agent_name: agentName, page, page_size: pageSize } }),
+
+  /**
+   * 获取对话详情
+   */
+  getConversation: (conversationId) =>
+    api.get(`/agent/conversations/${conversationId}`),
+
+  /**
+   * 更新对话标题
+   */
+  updateConversationTitle: (conversationId, title) =>
+    api.put(`/agent/conversations/${conversationId}/title`, { title }),
+
+  /**
+   * 删除对话
+   */
+  deleteConversation: (conversationId) =>
+    api.delete(`/agent/conversations/${conversationId}`)
 }
 
 export default api

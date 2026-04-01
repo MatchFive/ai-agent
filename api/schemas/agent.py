@@ -33,3 +33,34 @@ class AgentInfo(BaseModel):
     name: str = Field(..., description="Agent名称")
     description: str = Field(..., description="Agent描述")
     tools: List[str] = Field(..., description="可用工具列表")
+
+
+class ConversationListItem(BaseModel):
+    """对话历史列表项"""
+    conversation_id: str
+    title: str = "新对话"
+    agent_name: Optional[str] = None
+    message_count: int = 0
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class ConversationDetail(BaseModel):
+    """对话详情（含完整消息）"""
+    conversation_id: str
+    title: str = "新对话"
+    agent_name: Optional[str] = None
+    messages: List[ChatMessage] = []
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class ConversationListResponse(BaseModel):
+    """对话列表响应"""
+    items: List[ConversationListItem]
+    total: int
+
+
+class UpdateTitleRequest(BaseModel):
+    """更新对话标题"""
+    title: str = Field(..., min_length=1, max_length=255, description="对话标题")

@@ -17,12 +17,22 @@
 
     <!-- 主体 -->
     <div class="app-body">
-      <!-- 左侧 Agent 列表 -->
-      <aside class="sidebar">
+      <!-- 左侧 Agent 图标栏 -->
+      <aside class="sidebar-narrow">
         <AgentSidebar v-model="selectedAgent" :agents="agentList" :loading="agentLoading" />
       </aside>
 
-      <!-- 右侧面板 -->
+      <!-- 中间对话历史列表 -->
+      <aside class="conversation-panel" v-if="selectedAgent">
+        <ConversationList
+          v-model="selectedConversation"
+          :agent-name="selectedAgent"
+          @new="handleNewConversation"
+          @delete="handleDeleteConversation"
+        />
+      </aside>
+
+      <!-- 右侧聊天面板 -->
       <main class="main-panel">
         <!-- 未选中 Agent -->
         <div v-if="!selectedAgent" class="welcome-panel">
@@ -35,8 +45,14 @@
           </div>
         </div>
 
-        <!-- 通用聊天界面 -->
-        <ChatPanel v-else :key="selectedAgent" :agent-info="currentAgentInfo" />
+        <!-- 聊天界面 -->
+        <ChatPanel
+          v-else
+          :key="selectedAgent + '-' + (selectedConversation || 'new')"
+          :agent-info="currentAgentInfo"
+          :conversation-id="selectedConversation"
+          @refresh-list="handleRefreshList"
+        />
       </main>
     </div>
 
@@ -46,17 +62,21 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Connection, ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
+import { useChatStore } from '../store/chat'
 import { agentApi } from '../api/agent'
 import AgentSidebar from '../components/AgentSidebar.vue'
+import ConversationList from '../components/ConversationList.vue'
 import ChatPanel from '../components/ChatPanel.vue'
 import UserModal from '../components/UserModal.vue'
 
 const userStore = useUserStore()
+const chatStore = useChatStore()
 
 const selectedAgent = ref(null)
+const selectedConversation = ref(null)
 const showUserModal = ref(false)
 const agentList = ref([])
 const agentLoading = ref(true)
@@ -77,6 +97,30 @@ const fetchAgentList = async () => {
     agentLoading.value = false
   }
 }
+
+const handleRefreshList = () => {
+  if (selectedAgent.value) {
+    chatStore.fetchConversations(selectedAgent.value)
+  }
+}
+
+const handleNewConversation = () => {
+  chatStore.newConversation()
+  selectedConversation.value = null
+}
+
+const handleDeleteConversation = async (conversationId) => {
+  await chatStore.deleteConversation(conversationId, selectedAgent.value)
+}
+
+// 切换 Agent 时加载对话列表
+watch(selectedAgent, (agentName) => {
+  if (agentName) {
+    chatStore.newConversation()
+    selectedConversation.value = null
+    chatStore.fetchConversations(agentName)
+  }
+})
 
 onMounted(() => {
   if (!userStore.user) {
@@ -148,11 +192,16 @@ onMounted(() => {
   overflow: hidden;
 }
 
-/* 左侧栏 */
-.sidebar {
+/* 左侧 Agent 图标栏 */
+.sidebar-narrow {
+  width: 60px;
+  flex-shrink: 0;
+}
+
+/* 中间对话列表 */
+.conversation-panel {
   width: 220px;
   flex-shrink: 0;
-  overflow: hidden;
 }
 
 /* 右侧面板 */

@@ -1,8 +1,7 @@
 <template>
   <div class="agent-sidebar">
-    <div class="sidebar-title">助手列表</div>
     <div v-if="loading" class="sidebar-loading">
-      <el-icon :size="20" class="is-loading"><Loading /></el-icon>
+      <el-icon :size="18" class="is-loading"><Loading /></el-icon>
     </div>
     <div v-else class="agent-list">
       <div
@@ -17,11 +16,8 @@
           :show-after="300"
           :offset="8"
         >
-          <div class="agent-card">
-            <div class="agent-icon">
-              {{ agent.name.charAt(0) }}
-            </div>
-            <span class="agent-name">{{ agent.description }}</span>
+          <div class="agent-icon">
+            {{ agent.name.charAt(0) }}
           </div>
         </el-tooltip>
       </div>
@@ -52,37 +48,27 @@ defineEmits(['update:modelValue'])
 
 <style scoped>
 .agent-sidebar {
-  width: 100%;
+  width: 60px;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #fafbfc;
+  align-items: center;
+  background: #f0f2f5;
   border-right: 1px solid #e8e8e8;
-}
-
-.sidebar-title {
-  padding: 16px 16px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #909399;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  padding-top: 8px;
 }
 
 .sidebar-loading {
-  display: flex;
-  justify-content: center;
-  padding: 20px;
+  padding: 12px 0;
   color: #c0c4cc;
 }
 
 .agent-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 8px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  width: 100%;
+  padding: 0 6px;
 }
 
 .agent-item {
@@ -91,48 +77,27 @@ defineEmits(['update:modelValue'])
   transition: all 0.2s;
 }
 
-.agent-item:hover .agent-card {
-  background: #f0f2f5;
+.agent-item:hover .agent-icon {
+  background: linear-gradient(135deg, #5a6fe0 0%, #6a4299 100%);
 }
 
-.agent-item.active .agent-card {
-  background: #667eea10;
-}
-
-.agent-item.active {
-  border-left: 3px solid #667eea;
-  padding-left: 5px;
-}
-
-.agent-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  transition: background 0.2s;
+.agent-item.active .agent-icon {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
 }
 
 .agent-icon {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #e0e3ea;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
   font-size: 16px;
   font-weight: 700;
-}
-
-.agent-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: #333;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin: 0 auto;
+  transition: background 0.2s, box-shadow 0.2s;
 }
 </style>

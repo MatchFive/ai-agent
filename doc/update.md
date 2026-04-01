@@ -1,5 +1,41 @@
 # 更新日志
 
+## 2026-04-01: 对话历史回顾 + 新建对话
+
+### 实现方案
+在现有 conversations 表基础上新增 agent_name 和 title 字段，新增对话历史列表/详情/删除/更新标题 4 个 API 接口，前端改造为三栏布局（Agent 图标栏 + 对话列表 + 聊天面板），支持查看历史对话和手动新建对话。
+
+### 变更内容
+
+#### 修改文件
+- `api/models/conversation.py` — Conversation 表新增 agent_name、title 字段；DatabaseStorage 支持写入 agent_name
+- `api/models/user.py` — init_db 增加 ALTER TABLE 迁移逻辑（兼容已有表）
+- `api/schemas/agent.py` — 新增 ConversationListItem、ConversationDetail、ConversationListResponse、UpdateTitleRequest schemas
+- `api/routers/agent.py` — 新增 4 个对话历史接口；_setup_conversation 传入 agent_name
+- `frontend/user/src/api/agent.js` — 新增 getConversations、getConversation、updateConversationTitle、deleteConversation
+- `frontend/user/src/store/chat.js` — 新增对话列表状态和 actions（fetchConversations、loadConversation、newConversation、deleteConversation、updateTitle）
+- `frontend/user/src/components/AgentSidebar.vue` — 缩窄为 60px 图标模式
+- `frontend/user/src/components/ChatPanel.vue` — 支持加载历史对话、自动标题、发送后刷新列表
+
+#### 新增文件
+- `frontend/user/src/components/ConversationList.vue` — 对话历史列表面板
+
+#### 修改布局
+- `frontend/user/src/views/Home.vue` — 三栏布局：AgentSidebar(60px) | ConversationList(220px) | ChatPanel(flex)
+
+#### 新增 API 接口
+- `GET /api/agent/conversations?agent_name=xxx` — 获取对话历史列表（分页）
+- `GET /api/agent/conversations/{id}` — 获取对话详情（含完整消息）
+- `DELETE /api/agent/conversations/{id}` — 删除对话
+- `PUT /api/agent/conversations/{id}/title` — 更新对话标题
+
+#### 前端交互流程
+1. 选择 Agent → 加载该 Agent 的对话历史列表
+2. 点击历史对话 → 加载消息内容
+3. 点击"新建对话" → 清空状态开始新对话
+4. 发送首条消息后自动以消息前 20 字作为标题
+5. 切换对话时通过 key 变化重建 ChatPanel 组件
+
 ## 2026-03-30: RAG 知识库通用化改造
 
 ### 实现方案

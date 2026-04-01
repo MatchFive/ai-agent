@@ -21,6 +21,8 @@ class Conversation(Base):
 
     conversation_id = Column(String(36), primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    agent_name = Column(String(100), nullable=True, index=True)
+    title = Column(String(255), nullable=True, default="新对话")
     messages = Column(Text, nullable=False, default="[]")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -32,9 +34,10 @@ class Conversation(Base):
 class DatabaseStorage(BaseMemory):
     """基于数据库的对话存储"""
 
-    def __init__(self, conversation_id: str, user_id: Optional[int] = None):
+    def __init__(self, conversation_id: str, user_id: Optional[int] = None, agent_name: Optional[str] = None):
         self.conversation_id = conversation_id
         self.user_id = user_id
+        self.agent_name = agent_name
 
     async def _get_session(self) -> AsyncSession:
         """获取数据库会话"""
@@ -55,6 +58,8 @@ class DatabaseStorage(BaseMemory):
             conv = Conversation(
                 conversation_id=self.conversation_id,
                 user_id=self.user_id,
+                agent_name=self.agent_name,
+                title="新对话",
                 messages="[]",
             )
             session.add(conv)

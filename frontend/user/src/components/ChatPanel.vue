@@ -4,7 +4,7 @@
     <div class="chat-header">
       <div class="chat-title">
         <div class="title-icon">{{ agentInfo.name.charAt(0) }}</div>
-        <span>{{ agentInfo.description }}</span>
+        <span>{{ chatStore.conversationTitle || agentInfo.description }}</span>
       </div>
       <el-button
         text
@@ -106,18 +106,30 @@ const props = defineProps({
   agentInfo: {
     type: Object,
     required: true
+  },
+  conversationId: {
+    type: String,
+    default: null
   }
 })
+
+const emit = defineEmits(['refreshList'])
 
 const chatStore = useChatStore()
 
 const inputMessage = ref('')
 const messagesContainer = ref(null)
 
-// 切换 agent 时重置对话状态
-watch(() => props.agentInfo.name, () => {
-  chatStore.reset()
-})
+// 加载历史对话
+watch(() => props.conversationId, async (id) => {
+  if (id) {
+    await chatStore.loadConversation(id)
+    await nextTick()
+    scrollToBottom()
+  }
+}, { immediate: true })
+
+// 切换 agent 时重置（由父组件通过 key 变化触发组件重建，此处无需额外处理）
 
 // 简单的 Markdown 渲染
 const renderMarkdown = (content) => {
@@ -140,6 +152,7 @@ const handleSend = async () => {
   if (!message || chatStore.isLoading) return
 
   inputMessage.value = ''
+  const isFirstMessage = !chatStore.conversationId
 
   chatStore.messages.push({
     role: 'user',
@@ -181,6 +194,15 @@ const handleSend = async () => {
         chatStore.isLoading = false
         chatStore.statusText = '正在分析中...'
         nextTick(() => scrollToBottom())
+
+        // 首条消息：自动设置标题
+        if (isFirstMessage && chatStore.conversationId) {
+          const title = message.length > 20 ? message.slice(0, 20) + '...' : message
+          chatStore.updateTitle(chatStore.conversationId, title, props.agentInfo.name)
+        }
+
+        // 刷新对话列表
+        emit('refreshList')
       },
       (status) => {
         chatStore.statusText = status
@@ -195,13 +217,14 @@ const handleSend = async () => {
 
 const handleClearChat = async () => {
   try {
-    await ElMessageBox.confirm('确定要清空所有对话记录吗？', '确认', {
+    await ElMessageBox.confirm('确定要清空当前对话吗？', '确认', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     })
     await chatStore.clearChat(props.agentInfo.name)
     ElMessage.success('对话已清空')
+    emit('refreshList')
   } catch {
     // 用户取消
   }
@@ -219,7 +242,9 @@ const scrollToBottom = () => {
 }
 
 onMounted(() => {
-  scrollToBottom()
+  if (chatStore.messages.length > 0) {
+    nextTick(() => scrollToBottom())
+  }
 })
 </script>
 
@@ -250,6 +275,9 @@ onMounted(() => {
   font-size: 15px;
   font-weight: 600;
   color: #333;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .title-icon {
@@ -263,6 +291,7 @@ onMounted(() => {
   justify-content: center;
   font-size: 13px;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 /* 消息区域 */
