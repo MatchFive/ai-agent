@@ -40,6 +40,16 @@
           </el-avatar>
           <span class="role-name">{{ message.role === 'user' ? '我' : agentInfo.description }}</span>
           <span class="timestamp">{{ formatTime(message.timestamp) }}</span>
+          <el-button
+            v-if="message.role === 'assistant' && message.content && !chatStore.isLoading"
+            class="save-exp-btn"
+            text
+            size="small"
+            :icon="CollectionTag"
+            :loading="savingExperienceIndex === index"
+            @click="handleSaveExperience(index)"
+            title="存为经验"
+          />
         </div>
         <div class="message-content" v-html="renderMarkdown(message.content)"></div>
       </div>
@@ -98,7 +108,7 @@
 <script setup>
 import { ref, nextTick, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { User, ChatDotRound } from '@element-plus/icons-vue'
+import { User, ChatDotRound, CollectionTag } from '@element-plus/icons-vue'
 import { useChatStore } from '../store/chat'
 import { agentApi } from '../api/agent'
 
@@ -119,6 +129,7 @@ const chatStore = useChatStore()
 
 const inputMessage = ref('')
 const messagesContainer = ref(null)
+const savingExperienceIndex = ref(null)
 
 // 加载历史对话
 watch(() => props.conversationId, async (id) => {
@@ -227,6 +238,23 @@ const handleClearChat = async () => {
     emit('refreshList')
   } catch {
     // 用户取消
+  }
+}
+
+const handleSaveExperience = async (assistantIndex) => {
+  if (!chatStore.conversationId) {
+    ElMessage.warning('请先开始对话')
+    return
+  }
+
+  savingExperienceIndex.value = assistantIndex
+  try {
+    await agentApi.saveExperience(chatStore.conversationId, -1)
+    ElMessage.success('已保存为经验')
+  } catch (error) {
+    ElMessage.error(error.message || '保存失败')
+  } finally {
+    savingExperienceIndex.value = null
   }
 }
 
@@ -373,6 +401,21 @@ onMounted(() => {
   margin-left: auto;
   font-size: 11px;
   color: #999;
+}
+
+.save-exp-btn {
+  margin-left: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  color: #999;
+}
+
+.message:hover .save-exp-btn {
+  opacity: 1;
+}
+
+.save-exp-btn:hover {
+  color: #667eea;
 }
 
 .message-content {

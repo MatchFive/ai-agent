@@ -147,7 +147,35 @@ export const agentApi = {
    * 删除对话
    */
   deleteConversation: (conversationId) =>
-    api.delete(`/agent/conversations/${conversationId}`)
+    api.delete(`/agent/conversations/${conversationId}`),
+
+  // ==================== 经验知识库 ====================
+
+  /**
+   * 保存经验
+   */
+  saveExperience: (conversationId, questionIndex = -1) =>
+    api.post('/agent/experiences', { conversation_id: conversationId, question_index: questionIndex }),
+
+  // ==================== 长期记忆 ====================
+
+  /**
+   * 获取长期记忆列表
+   */
+  getMemories: (page = 1, pageSize = 20, category = null) =>
+    api.get('/agent/memories', { params: { page, page_size: pageSize, ...(category ? { category } : {}) } }),
+
+  /**
+   * 删除长期记忆
+   */
+  deleteMemory: (memoryId) =>
+    api.delete(`/agent/memories/${memoryId}`),
+
+  /**
+   * 清空长期记忆
+   */
+  clearMemories: () =>
+    api.delete('/agent/memories'),
 }
 
 export default api

@@ -132,3 +132,39 @@ class DatabaseStorage(BaseMemory):
             await session.commit()
 
         logger.info(f"[DBStorage] 对话已清空 | conversation={self.conversation_id}")
+
+
+class UserLongTermMemory(Base):
+    """用户长期记忆元数据表"""
+    __tablename__ = "user_long_term_memories"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    milvus_id = Column(Integer, nullable=False, comment="Milvus中记录的ID")
+    text = Column(String(2000), nullable=False, comment="记忆文本内容")
+    category = Column(String(50), nullable=False, default="context", comment="记忆类别: preference/fact/context/instruction")
+    importance = Column(Integer, nullable=False, default=3, comment="重要程度 1-5")
+    agent_name = Column(String(100), nullable=False, comment="创建此记忆的Agent")
+    conversation_id = Column(String(36), nullable=True, comment="来源对话ID")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<UserLongTermMemory(id={self.id}, user_id={self.user_id}, category='{self.category}')>"
+
+
+class AgentExperience(Base):
+    """Agent 经验知识库元数据表"""
+    __tablename__ = "agent_experiences"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, comment="保存此经验的用户")
+    agent_name = Column(String(100), nullable=False, index=True, comment="产生此经验的Agent")
+    question = Column(String(2000), nullable=False, comment="用户问题")
+    answer = Column(Text, nullable=False, comment="助手回答")
+    milvus_id = Column(Integer, nullable=False, comment="Milvus中记录的ID")
+    hit_count = Column(Integer, nullable=False, default=0, comment="被检索命中次数")
+    last_referenced_at = Column(DateTime, nullable=True, comment="最近一次被检索命中时间")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<AgentExperience(id={self.id}, agent_name='{self.agent_name}', question='{self.question[:30]}...')>"

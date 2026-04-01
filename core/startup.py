@@ -175,7 +175,7 @@ async def _seed_investment_agent(session):
         system_prompt=system_prompt,
         agent_class="agents.investment_agent.InvestmentAgent",
         is_active=True,
-        config_json=json.dumps({"cache_ttl": 900}),
+        config_json=json.dumps({"cache_ttl": 900, "long_term_memory": {"enabled": True}, "experience_kb": {"enabled": True}}),
     )
     session.add(agent)
     await session.flush()
@@ -226,7 +226,7 @@ async def _seed_unity_agent(session):
         system_prompt=system_prompt,
         agent_class="agents.unity_agent.UnityAgent",
         is_active=True,
-        config_json=json.dumps({"cache_ttl": 0, "knowledge_base": "Unity手册"}),
+        config_json=json.dumps({"cache_ttl": 0, "knowledge_base": "Unity手册", "long_term_memory": {"enabled": False}, "experience_kb": {"enabled": True}}),
     )
     session.add(agent)
     await session.flush()
@@ -241,6 +241,129 @@ async def _seed_unity_agent(session):
             tool_id=tool.id,
             sort_order=0,
         ))
+
+
+async def init_long_term_memory():
+    """初始化长期记忆 Milvus collection"""
+    from core.config import settings
+    if not settings.ltm_enabled:
+        logger.info("[Startup] 长期记忆功能已禁用，跳过初始化")
+        return
+
+    from core.long_term_memory import long_term_memory_manager
+    success = await long_term_memory_manager.ensure_collection()
+    if success:
+        logger.info("[Startup] 长期记忆 collection 已就绪")
+    else:
+        logger.warning("[Startup] 长期记忆 collection 初始化失败")
+
+
+async def init_experience_kb():
+    """初始化经验知识库 Milvus collection 和 DB 记录"""
+    from core.config import settings
+    from core.vectorstore import vectorstore
+
+    # 1. 创建 Milvus collection（幂等）
+    from pymilvus import FieldSchema, DataType, CollectionSchema
+    fields = [
+        FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+        FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=settings.milvus_dim),
+        FieldSchema(name="question", dtype=DataType.VARCHAR, max_length=2000),
+        FieldSchema(name="answer", dtype=DataType.VARCHAR, max_length=5000),
+        FieldSchema(name="agent_name", dtype=DataType.VARCHAR, max_length=100),
+        FieldSchema(name="created_at", dtype=DataType.INT64),
+    ]
+    success = vectorstore.create_collection("agent_experiences", fields_schema=fields)
+    if success:
+        logger.info("[Startup] 经验知识库 collection 已就绪")
+    else:
+        logger.warning("[Startup] 经验知识库 collection 初始化失败")
+        return
+
+    # 2. Seed KnowledgeBase 记录
+    from api.models.user import get_session_factory
+    from api.models.agent_config import KnowledgeBase
+
+    factory = get_session_factory()
+    if factory is None:
+        return
+
+    async with factory() as session:
+        result = await session.execute(
+            select(KnowledgeBase).where(KnowledgeBase.name == "经验库")
+        )
+        if not result.scalar_one_or_none():
+            kb = KnowledgeBase(
+                name="经验库",
+                description="Agent 对话经验积累，用户保存的问题与解决方案",
+                collection_name="agent_experiences",
+                embedding_dim=settings.milvus_dim,
+                is_active=True,
+            )
+            session.add(kb)
+            await session.commit()
+            logger.info("[Seed] 默认知识库 '经验库' 配置已创建")
+
+
+async def cleanup_stale_experiences():
+    """清理长时间未被检索命中的经验（闲置清理）"""
+    from datetime import datetime, timedelta
+    from api.models.user import get_session_factory
+    from api.models.conversation import AgentExperience
+
+    factory = get_session_factory()
+    if not factory:
+        return
+
+    try:
+        # 清理策略：创建超过 30 天且从未被命中，或超过 60 天未被命中的经验
+        threshold_never_hit = datetime.utcnow() - timedelta(days=30)
+        threshold_stale = datetime.utcnow() - timedelta(days=60)
+
+        async with factory() as session:
+            # 1. 创建超过30天且从未被命中（hit_count=0 或 last_referenced_at 为空）
+            result = await session.execute(
+                select(AgentExperience).where(
+                    AgentExperience.last_referenced_at == None,
+                    AgentExperience.created_at < threshold_never_hit,
+                )
+            )
+            never_hit = result.scalars().all()
+
+            # 2. 超过60天未被命中
+            result = await session.execute(
+                select(AgentExperience).where(
+                    AgentExperience.last_referenced_at != None,
+                    AgentExperience.last_referenced_at < threshold_stale,
+                )
+            )
+            stale = result.scalars().all()
+
+            to_delete = list(never_hit) + list(stale)
+            if not to_delete:
+                logger.info("[经验清理] 无需清理")
+                return
+
+            # 从 Milvus 删除
+            milvus_ids = [exp.milvus_id for exp in to_delete if exp.milvus_id]
+            if milvus_ids:
+                try:
+                    from core.vectorstore import vectorstore
+                    await vectorstore.delete_by_ids("agent_experiences", milvus_ids)
+                except Exception as e:
+                    logger.warning(f"[经验清理] Milvus 删除失败: {e}")
+
+            # 从 MySQL 删除
+            for exp in to_delete:
+                await session.delete(exp)
+            await session.commit()
+
+            logger.info(
+                f"[经验清理] 清理完成 | "
+                f"从未命中 {len(never_hit)} 条, 闲置过期 {len(stale)} 条"
+            )
+    except Exception as e:
+        logger.error(f"[经验清理] 执行失败: {e}")
 
 
 async def load_agents_from_db():

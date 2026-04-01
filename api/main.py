@@ -23,11 +23,14 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     # 工具扫描与同步
-    from core.startup import import_tools, sync_tools_to_db, seed_default_agents, load_agents_from_db
+    from core.startup import import_tools, sync_tools_to_db, seed_default_agents, load_agents_from_db, init_long_term_memory, init_experience_kb, cleanup_stale_experiences
     import_tools()
     await sync_tools_to_db()
     await seed_default_agents()
     await load_agents_from_db()
+    await init_long_term_memory()
+    await init_experience_kb()
+    await cleanup_stale_experiences()
 
     yield
 

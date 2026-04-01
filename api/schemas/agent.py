@@ -64,3 +64,43 @@ class ConversationListResponse(BaseModel):
 class UpdateTitleRequest(BaseModel):
     """更新对话标题"""
     title: str = Field(..., min_length=1, max_length=255, description="对话标题")
+
+
+class MemoryItemSchema(BaseModel):
+    """长期记忆项"""
+    id: int
+    text: str
+    category: str
+    importance: int
+    agent_name: str
+    conversation_id: Optional[str] = None
+    created_at: datetime
+
+
+class MemoryListResponse(BaseModel):
+    """长期记忆列表响应"""
+    items: List[MemoryItemSchema]
+    total: int
+
+
+# ==================== 经验知识库 ====================
+
+class SaveExperienceRequest(BaseModel):
+    """保存经验请求"""
+    conversation_id: str = Field(..., description="对话ID")
+    question_index: int = Field(default=-1, description="保存第几组Q&A（-1表示最后一组）")
+
+
+class ExperienceItemSchema(BaseModel):
+    """经验项"""
+    id: int
+    question: str
+    answer: str
+    agent_name: str
+    created_at: datetime
+
+
+class ExperienceListResponse(BaseModel):
+    """经验列表响应"""
+    items: List[ExperienceItemSchema]
+    total: int

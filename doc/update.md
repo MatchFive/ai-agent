@@ -1,4 +1,79 @@
-# 更新日志
+ # 更新日志
+
+## 2026-04-01: 经验知识库功能
+
+### 实现方案
+新增全局共享的经验知识库：用户在对话中得到满意的解答后，手动触发将"问题+解决方案"保存为经验（存入 Milvus 向量数据库），后续任何人问类似问题时都能检索到相关经验辅助回答。经验库全局共享，每个 Agent 可通过 `config_json` 中的 `experience_kb.enabled` 独立控制是否启用检索。复用现有 KnowledgeBase 体系，新建 `经验库` KnowledgeBase 记录对应 Milvus collection `agent_experiences`。
+
+### 变更内容
+
+#### 修改文件
+- `api/models/conversation.py` — 新增 AgentExperience 表（user_id、agent_name、question、answer、milvus_id、hit_count、last_referenced_at、created_at）
+- `api/schemas/agent.py` — 新增 SaveExperienceRequest schema
+- `api/routers/agent.py` — 新增 `_is_experience_kb_enabled`、`_inject_experiences`、`_record_experience_hits` 辅助函数；chat/chat_stream 中注入经验检索；新增保存经验 API（用户侧不暴露列表/删除接口）
+- `core/startup.py` — 新增 `init_experience_kb()`（创建 Milvus collection + seed 经验库 KB 记录）、`cleanup_stale_experiences()`（闲置清理）；InvestmentAgent 和 UnityAgent 种子数据加入 `"experience_kb": {"enabled": true}`
+- `api/main.py` — lifespan 中调用 `init_experience_kb()` 和 `cleanup_stale_experiences()`
+- `frontend/user/src/components/ChatPanel.vue` — 助手消息 hover 显示"存为经验"按钮
+- `frontend/user/src/api/agent.js` — 新增 `saveExperience` API 方法
+
+#### 新增数据库表
+- `agent_experiences` — 经验元数据（user_id、agent_name、question、answer、milvus_id、hit_count、last_referenced_at、created_at）
+
+#### 新增 API 接口
+- `POST /api/agent/experiences` — 保存经验（传入 conversation_id + question_index，从对话中提取 Q&A 对）
+
+#### 闲置清理机制
+- 服务启动时执行 `cleanup_stale_experiences()`
+- 清理规则：创建超过 30 天且从未被检索命中，或超过 60 天未被命中的经验
+- 同时清理 Milvus 和 MySQL 记录
+- 每次经验被检索命中时，异步更新 `hit_count` 和 `last_referenced_at`
+
+#### 新增 KnowledgeBase 种子数据
+- `经验库` — collection_name=`agent_experiences`，embedding_dim=1024
+
+#### 经验检索链路
+- 用户提问 → 检查 Agent `experience_kb.enabled` → embed query → VectorStore.search(collection="agent_experiences", top_k=3) → 格式化为 `[相关经验]` 系统消息 → 注入 Agent 短期记忆 → 异步更新命中记录 → LLM 回答
+
+## 2026-04-01: Agent 长期记忆功能
+
+### 实现方案
+新增跨对话的长期记忆系统：每次助手回复后异步调用 LLM 提取有价值信息存入 Milvus 向量数据库，下次对话前检索相关记忆注入上下文。使用单一 Milvus collection + user_id 过滤实现用户隔离，通过 Agent config_json 中的 `long_term_memory.enabled` 按 Agent 独立控制开关。
+
+### 变更内容
+
+#### 新增文件
+- `core/long_term_memory.py` — LongTermMemoryManager 核心类（retrieve、extract_and_store、format_memories_as_context、ensure_collection、delete_memory/delete_memories）
+
+#### 修改文件
+- `core/vectorstore.py` — 新增 create_collection（幂等）、insert（批量插入）、search 扩展（filter_expr/output_fields 参数）、delete_by_ids 方法；新增长期记忆 collection schema 定义
+- `core/config.py` — 新增 ltm_enabled、ltm_max_memories、ltm_extraction_max_tokens、ltm_collection_name 配置项
+- `api/models/conversation.py` — 新增 UserLongTermMemory 表（user_id、milvus_id、text、category、importance、agent_name、conversation_id、created_at）
+- `api/routers/agent.py` — 非流式/流式 chat 接口集成长期记忆检索+提取；新增 _is_ltm_enabled、_inject_long_term_memories 辅助函数；新增 3 个记忆管理 API
+- `api/schemas/agent.py` — 新增 MemoryItemSchema、MemoryListResponse schema
+- `core/startup.py` — 新增 init_long_term_memory() 函数；InvestmentAgent 种子数据启用长期记忆；UnityAgent 种子数据禁用长期记忆
+- `api/main.py` — lifespan 中调用 init_long_term_memory()
+- `develop.md` — 更新项目结构
+
+#### 新增数据库表
+- `user_long_term_memories` — 用户长期记忆元数据（用于分页查询和删除定位）
+
+#### 新增 API 接口
+- `GET /api/agent/memories` — 分页查询当前用户长期记忆（支持 category 过滤）
+- `DELETE /api/agent/memories/{id}` — 删除单条长期记忆（同时删 Milvus + MySQL）
+- `DELETE /api/agent/memories` — 清空当前用户所有长期记忆
+
+#### Milvus Collection
+- `agent_long_term_memory` — 单一 collection，schema 包含 id(PK/auto_id)、embedding(FLOAT_VECTOR)、text、user_id、agent_name、category、importance、created_at、conversation_id
+
+#### 长期记忆链路
+- **检索链路**: 用户提问 → embed query → VectorStore.search(filter=user_id) → 格式化为系统消息 → 注入 Agent 短期记忆 → LLM 回答
+- **提取链路**: 助手回复完成 → asyncio.create_task(fire-and-forget) → LLM 分析对话轮次 → 提取记忆列表 → embed → insert Milvus + MySQL
+- **记忆分类**: preference(偏好)、fact(事实)、context(上下文)、instruction(指令)
+- **重要程度**: 1-5 分，用于未来去重/衰减策略
+
+#### Agent 级别开关
+- InvestmentAgent: `"long_term_memory": {"enabled": true}`
+- UnityAgent: `"long_term_memory": {"enabled": false}`（RAG Agent 暂不开长期记忆）
 
 ## 2026-04-01: 对话历史回顾 + 新建对话
 

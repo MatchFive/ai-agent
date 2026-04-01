@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     milvus_port: int = Field(default=19530, description="Milvus端口")
     milvus_dim: int = Field(default=1024, description="向量维度")
 
+    # 长期记忆配置
+    ltm_enabled: bool = Field(default=True, description="是否启用长期记忆")
+    ltm_max_memories: int = Field(default=5, description="每次检索返回的最大记忆条数")
+    ltm_extraction_max_tokens: int = Field(default=256, description="记忆提取LLM最大token数")
+    ltm_collection_name: str = Field(default="agent_long_term_memory", description="Milvus长期记忆集合名")
+
     # 数据库配置 - MySQL
     db_host: str = Field(default="localhost")
     db_port: int = Field(default=3306)
