@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 import json
 import asyncio
+from typing import Optional
 
 from api.models.user import User, get_session
 from api.deps import get_current_user
@@ -24,8 +25,6 @@ from api.schemas.agent import (
     MemoryItemSchema,
     MemoryListResponse,
     SaveExperienceRequest,
-    ExperienceItemSchema,
-    ExperienceListResponse,
 )
 from api.models.conversation import DatabaseStorage, Conversation, UserLongTermMemory, AgentExperience
 from agents.manager import agent_manager
