@@ -8,6 +8,7 @@
   >
     <!-- 自定义头部 -->
     <div class="modal-header">
+      <span class="modal-title">个人信息</span>
       <button class="close-btn" @click="visible = false">
         <el-icon :size="16"><Close /></el-icon>
       </button>
@@ -44,6 +45,43 @@
           <span class="info-value">{{ formatDate(userStore.user?.created_at) }}</span>
         </div>
       </div>
+
+      <!-- 修改密码 -->
+      <div class="password-section">
+        <button class="toggle-pwd-btn" @click="showPasswordForm = !showPasswordForm">
+          <el-icon :size="14"><Lock /></el-icon>
+          {{ showPasswordForm ? '收起' : '修改密码' }}
+          <el-icon :size="12" class="arrow" :class="{ expanded: showPasswordForm }"><ArrowDown /></el-icon>
+        </button>
+
+        <div v-if="showPasswordForm" class="password-form">
+          <div class="pwd-field">
+            <label>旧密码</label>
+            <input
+              type="password"
+              v-model="pwdForm.old_password"
+              placeholder="请输入旧密码"
+              @keyup.enter="handleChangePassword"
+            />
+          </div>
+          <div class="pwd-field">
+            <label>新密码</label>
+            <input
+              type="password"
+              v-model="pwdForm.new_password"
+              placeholder="请输入新密码（至少6位）"
+              @keyup.enter="handleChangePassword"
+            />
+          </div>
+          <button
+            class="pwd-submit-btn"
+            :disabled="pwdLoading || !pwdForm.old_password || !pwdForm.new_password"
+            @click="handleChangePassword"
+          >
+            {{ pwdLoading ? '提交中...' : '确认修改' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <div class="modal-footer">
@@ -56,11 +94,12 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Close, SwitchButton } from '@element-plus/icons-vue'
+import { Close, SwitchButton, Lock, ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
+import { authApi } from '../api/auth'
 
 const props = defineProps({
   modelValue: {
@@ -79,6 +118,13 @@ const visible = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
+const showPasswordForm = ref(false)
+const pwdLoading = ref(false)
+const pwdForm = reactive({
+  old_password: '',
+  new_password: ''
+})
+
 const formatDate = (dateStr) => {
   if (!dateStr) return '-'
   const date = new Date(dateStr)
@@ -87,6 +133,36 @@ const formatDate = (dateStr) => {
     month: '2-digit',
     day: '2-digit'
   })
+}
+
+const handleChangePassword = async () => {
+  if (!pwdForm.old_password || !pwdForm.new_password) {
+    ElMessage.warning('请填写完整')
+    return
+  }
+  if (pwdForm.new_password.length < 6) {
+    ElMessage.warning('新密码至少6位')
+    return
+  }
+
+  pwdLoading.value = true
+  try {
+    await authApi.changePassword({
+      old_password: pwdForm.old_password,
+      new_password: pwdForm.new_password
+    })
+    ElMessage.success('密码修改成功，请重新登录')
+    pwdForm.old_password = ''
+    pwdForm.new_password = ''
+    showPasswordForm.value = false
+    visible.value = false
+    userStore.logout()
+    router.push('/login')
+  } catch (error) {
+    ElMessage.error(error.message || '修改失败')
+  } finally {
+    pwdLoading.value = false
+  }
 }
 
 const handleLogout = () => {
@@ -115,8 +191,16 @@ const handleLogout = () => {
 
 .modal-header {
   display: flex;
-  justify-content: flex-end;
-  padding: 12px 12px 0;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
 }
 
 .close-btn {
@@ -146,7 +230,7 @@ const handleLogout = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-bottom: 24px;
+  padding-bottom: 20px;
   border-bottom: 1px solid #f1f5f9;
 }
 
@@ -185,10 +269,10 @@ const handleLogout = () => {
 }
 
 .info-cards {
-  padding: 16px 0 4px;
+  padding: 14px 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .info-card {
@@ -209,6 +293,100 @@ const handleLogout = () => {
   font-size: 13px;
   color: #1e293b;
   font-weight: 500;
+}
+
+/* 修改密码区域 */
+.password-section {
+  padding: 8px 0 0;
+}
+
+.toggle-pwd-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px dashed #e2e8f0;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-pwd-btn:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: #fafafe;
+}
+
+.arrow {
+  margin-left: auto;
+  transition: transform 0.25s;
+}
+
+.arrow.expanded {
+  transform: rotate(180deg);
+}
+
+.password-form {
+  padding: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pwd-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 4px;
+}
+
+.pwd-field input {
+  width: 100%;
+  height: 36px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: #1e293b;
+  outline: none;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.pwd-field input::placeholder {
+  color: #cbd5e1;
+}
+
+.pwd-field input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.pwd-submit-btn {
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 4px;
+}
+
+.pwd-submit-btn:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.pwd-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .modal-footer {

@@ -53,6 +53,7 @@
               show-password
               size="large"
               class="custom-input"
+              @keyup.enter="handleLogin"
             />
           </el-form-item>
 

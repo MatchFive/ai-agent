@@ -16,6 +16,7 @@ from api.schemas.user import (
     UserLogin,
     UserResponse,
     Token,
+    ChangePasswordRequest,
 )
 from api.deps import get_current_user
 
@@ -36,7 +37,7 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(user: User) -> str:
     """创建访问令牌"""
-    expire = datetime.utcnow() + timedelta(days=7)
+    expire = datetime.utcnow() + timedelta(hours=24)
     payload = {
         "sub": user.uid,  # 使用 uid 作为唯一标识
         "exp": expire,
@@ -156,3 +157,26 @@ async def login(
 async def get_me(current_user: User = Depends(get_current_user)):
     """获取当前登录用户信息"""
     return UserResponse.model_validate(current_user)
+
+
+@router.put("/password", summary="修改密码")
+async def change_password(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    修改当前用户密码
+    - 需要验证旧密码
+    - 新密码至少6位
+    """
+    if not verify_password(body.old_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="旧密码错误"
+        )
+
+    current_user.password_hash = get_password_hash(body.new_password)
+    await session.commit()
+
+    return {"message": "密码修改成功", "success": True}

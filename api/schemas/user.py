@@ -39,6 +39,12 @@ class UserResponse(UserBase):
 
 # ========== Token相关 ==========
 
+class ChangePasswordRequest(BaseModel):
+    """修改密码请求"""
+    old_password: str = Field(..., min_length=1, description="旧密码")
+    new_password: str = Field(..., min_length=6, max_length=100, description="新密码")
+
+
 class Token(BaseModel):
     """Token响应"""
     access_token: str

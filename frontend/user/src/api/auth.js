@@ -23,7 +23,20 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response.data,
   (error) => {
+    const status = error.response?.status
     const message = error.response?.data?.detail || '请求失败'
+
+    // Token 过期或无效，自动跳转登录页
+    if (status === 401 && message.includes('过期')) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      // 避免在登录页重复跳转
+      if (window.location.hash !== '#/login') {
+        window.location.hash = '#/login'
+      }
+      return Promise.reject(new Error('登录已过期，请重新登录'))
+    }
+
     return Promise.reject(new Error(message))
   }
 )
@@ -31,7 +44,8 @@ api.interceptors.response.use(
 export const authApi = {
   login: (credentials) => api.post('/auth/login', credentials),
   register: (data) => api.post('/auth/register', data),
-  getMe: () => api.get('/auth/me')
+  getMe: () => api.get('/auth/me'),
+  changePassword: (data) => api.put('/auth/password', data)
 }
 
 export default api
