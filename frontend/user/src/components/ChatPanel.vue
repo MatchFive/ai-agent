@@ -29,7 +29,7 @@
       <div
         v-for="(message, index) in chatStore.messages"
         :key="index"
-        :class="['message', message.role]"
+        :class="['message', message.role, { streaming: streamingIndex === index }]"
       >
         <div class="message-header">
           <el-avatar
@@ -51,11 +51,13 @@
             title="存为经验"
           />
         </div>
-        <div class="message-content" v-html="renderMarkdown(message.content)"></div>
+        <div class="message-content markdown-body" v-html="renderMarkdown(message.content)"></div>
+        <!-- 打字机光标 -->
+        <span v-if="streamingIndex === index" class="typing-cursor"></span>
       </div>
 
-      <!-- Loading 指示器 -->
-      <div v-if="chatStore.isLoading && !chatStore.messages[chatStore.messages.length - 1]?.content" class="loading-indicator">
+      <!-- Loading 指示器（仅在流式内容还没开始时显示） -->
+      <div v-if="chatStore.isLoading && streamingIndex === null" class="loading-indicator">
         <div class="typing-animation">
           <span></span>
           <span></span>
@@ -106,11 +108,13 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, watch } from 'vue'
+import { ref, nextTick, onMounted, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { User, ChatDotRound, CollectionTag } from '@element-plus/icons-vue'
 import { useChatStore } from '../store/chat'
 import { agentApi } from '../api/agent'
+import { marked } from 'marked'
+import hljs from 'highlight.js'
 
 const props = defineProps({
   agentInfo: {
@@ -130,6 +134,22 @@ const chatStore = useChatStore()
 const inputMessage = ref('')
 const messagesContainer = ref(null)
 const savingExperienceIndex = ref(null)
+const streamingIndex = ref(null)  // 当前正在流式输出的消息索引
+
+// 配置 marked
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+})
+
+// 自定义 marked renderer —— 代码块高亮
+const renderer = new marked.Renderer()
+renderer.code = ({ text, lang }) => {
+  const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
+  const highlighted = hljs.highlight(text, { language }).value
+  return `<pre class="hljs-pre"><div class="code-header"><span class="code-lang">${language}</span><button class="copy-btn" onclick="navigator.clipboard.writeText(this.closest('pre').querySelector('code').textContent);this.textContent='已复制!';setTimeout(()=>this.textContent='复制',1500)">复制</button></div><code class="hljs language-${language}">${highlighted}</code></pre>`
+}
+marked.use({ renderer })
 
 // 加载历史对话
 watch(() => props.conversationId, async (id) => {
@@ -140,21 +160,14 @@ watch(() => props.conversationId, async (id) => {
   }
 }, { immediate: true })
 
-// 切换 agent 时重置（由父组件通过 key 变化触发组件重建，此处无需额外处理）
-
-// 简单的 Markdown 渲染
+// Markdown 渲染（marked + highlight.js）
 const renderMarkdown = (content) => {
   if (!content) return ''
-  let html = content
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>')
-  html = html.replace(/\n/g, '<br>')
-  return html
+  try {
+    return marked.parse(content)
+  } catch (e) {
+    return content.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  }
 }
 
 // 发送消息
@@ -177,8 +190,10 @@ const handleSend = async () => {
     timestamp: new Date().toISOString()
   }
   chatStore.messages.push(assistantMessage)
+  const msgIndex = chatStore.messages.length - 1
 
   chatStore.isLoading = true
+  streamingIndex.value = msgIndex
   chatStore.error = null
 
   await nextTick()
@@ -199,10 +214,12 @@ const handleSend = async () => {
       (error) => {
         chatStore.error = error
         chatStore.isLoading = false
+        streamingIndex.value = null
         chatStore.statusText = '正在分析中...'
       },
       () => {
         chatStore.isLoading = false
+        streamingIndex.value = null
         chatStore.statusText = '正在分析中...'
         nextTick(() => scrollToBottom())
 
@@ -223,6 +240,7 @@ const handleSend = async () => {
   } catch (error) {
     chatStore.error = error.message
     chatStore.isLoading = false
+    streamingIndex.value = null
   }
 }
 
@@ -382,6 +400,12 @@ onMounted(() => {
 
 .message.assistant {
   border-left: 3px solid #67c23a;
+  transition: border-left-color 0.3s ease;
+}
+
+/* 流式输出中的消息卡片效果 */
+.message.assistant.streaming {
+  border-left-color: #667eea;
 }
 
 .message-header {
@@ -422,18 +446,123 @@ onMounted(() => {
   line-height: 1.8;
   color: #333;
   font-size: 14px;
+  word-break: break-word;
 }
 
-.message-content :deep(pre) {
-  background: #f6f8fa;
-  padding: 10px 14px;
-  border-radius: 6px;
-  overflow-x: auto;
+/* Markdown 样式 */
+.message-content.markdown-body :deep(h1),
+.message-content.markdown-body :deep(h2),
+.message-content.markdown-body :deep(h3),
+.message-content.markdown-body :deep(h4) {
+  margin: 16px 0 8px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.message-content.markdown-body :deep(h1) { font-size: 1.4em; }
+.message-content.markdown-body :deep(h2) { font-size: 1.25em; }
+.message-content.markdown-body :deep(h3) { font-size: 1.1em; }
+
+.message-content.markdown-body :deep(p) {
   margin: 8px 0;
 }
 
-.message-content :deep(code) {
-  background: #f6f8fa;
+.message-content.markdown-body :deep(ul),
+.message-content.markdown-body :deep(ol) {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+
+.message-content.markdown-body :deep(li) {
+  margin: 4px 0;
+}
+
+.message-content.markdown-body :deep(blockquote) {
+  border-left: 4px solid #dcdfe6;
+  padding: 8px 16px;
+  margin: 8px 0;
+  color: #666;
+  background: #f9f9f9;
+  border-radius: 0 6px 6px 0;
+}
+
+.message-content.markdown-body :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.message-content.markdown-body :deep(th),
+.message-content.markdown-body :deep(td) {
+  border: 1px solid #ebeef5;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.message-content.markdown-body :deep(th) {
+  background: #f5f7fa;
+  font-weight: 600;
+}
+
+.message-content.markdown-body :deep(a) {
+  color: #667eea;
+  text-decoration: none;
+}
+.message-content.markdown-body :deep(a:hover) {
+  text-decoration: underline;
+}
+
+/* 代码块 */
+.message-content.markdown-body :deep(.hljs-pre) {
+  position: relative;
+  background: #1e1e2e;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 12px 0;
+}
+
+.message-content.markdown-body :deep(.code-header) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 14px;
+  background: #313244;
+  font-size: 12px;
+}
+
+.message-content.markdown-body :deep(.code-lang) {
+  color: #a6adc8;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.message-content.markdown-body :deep(.copy-btn) {
+  color: #a6adc8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.message-content.markdown-body :deep(.copy-btn:hover) {
+  color: #cdd6f4;
+  background: #45475a;
+}
+
+.message-content.markdown-body :deep(.hljs) {
+  display: block;
+  padding: 14px;
+  overflow-x: auto;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 行内代码 */
+.message-content.markdown-body :deep(code:not(.hljs)) {
+  background: #f0f2f5;
   padding: 2px 6px;
   border-radius: 4px;
   font-family: 'Consolas', 'Monaco', monospace;
@@ -441,13 +570,23 @@ onMounted(() => {
   color: #e83e8c;
 }
 
-.message-content :deep(pre code) {
-  background: none;
-  padding: 0;
-  color: inherit;
+/* 打字机光标 */
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: #67c23a;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursorBlink 0.8s infinite;
 }
 
-/* Loading */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* Loading —— 仅在流式内容还没开始时显示（纯等待状态） */
 .loading-indicator {
   display: flex;
   align-items: center;

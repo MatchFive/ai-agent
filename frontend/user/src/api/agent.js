@@ -75,18 +75,24 @@ export const agentApi = {
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
+      let buffer = ''  // 缓冲区，处理跨 chunk 的不完整行
 
       while (true) {
         const { done, value } = await reader.read()
 
         if (done) break
 
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        // 最后一个元素可能是不完整的行，保留在 buffer 中
+        buffer = lines.pop() || ''
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
+          const trimmed = line.trim()
+          if (!trimmed) continue  // 跳过空行
+
+          if (trimmed.startsWith('data: ')) {
+            const data = trimmed.slice(6)
 
             if (data === '[DONE]') {
               onDone()
