@@ -32,6 +32,7 @@ class UserResponse(UserBase):
 
     id: int
     uid: str
+    email: Optional[str] = None
     role: str
     is_active: bool
     created_at: datetime
@@ -43,6 +44,17 @@ class ChangePasswordRequest(BaseModel):
     """修改密码请求"""
     old_password: str = Field(..., min_length=1, description="旧密码")
     new_password: str = Field(..., min_length=6, max_length=100, description="新密码")
+
+
+class SendVerifyCodeRequest(BaseModel):
+    """发送邮箱验证码请求"""
+    email: str = Field(..., description="邮箱地址")
+
+
+class BindEmailRequest(BaseModel):
+    """绑定邮箱请求"""
+    email: str = Field(..., description="邮箱地址")
+    code: str = Field(..., min_length=6, max_length=6, description="验证码")
 
 
 class Token(BaseModel):

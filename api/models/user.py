@@ -25,6 +25,7 @@ class User(Base):
     uid = Column(String(36), unique=True, index=True, nullable=False, default=lambda: str(uuid.uuid4()))
     username = Column(String(50), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, index=True, nullable=True)  # 绑定邮箱
     role = Column(String(20), default="user", nullable=False)  # admin / user
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -101,6 +102,16 @@ async def init_db():
                 await conn.execute(text("ALTER TABLE conversations ADD COLUMN agent_name VARCHAR(100) DEFAULT NULL"))
             if 'title' not in columns:
                 await conn.execute(text("ALTER TABLE conversations ADD COLUMN title VARCHAR(255) DEFAULT '新对话'"))
+            # 检查 users 表是否有 email 列
+            def _get_user_columns(sync_conn):
+                insp = sa_inspect(sync_conn)
+                if 'users' in insp.get_table_names():
+                    return [col['name'] for col in insp.get_columns('users')]
+                return []
+            user_columns = await conn.run_sync(_get_user_columns)
+            if 'email' not in user_columns:
+                await conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255) UNIQUE DEFAULT NULL"))
+                logger.info("Added email column to users table")
     except Exception as e:
         logger.warning(f"数据库列迁移跳过: {e}")
 

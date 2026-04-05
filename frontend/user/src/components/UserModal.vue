@@ -37,6 +37,12 @@
           <span class="info-value">{{ userStore.user?.username }}</span>
         </div>
         <div class="info-card">
+          <span class="info-label">邮箱</span>
+          <span class="info-value" :class="{ muted: !userStore.user?.email }">
+            {{ userStore.user?.email || '未绑定' }}
+          </span>
+        </div>
+        <div class="info-card">
           <span class="info-label">角色</span>
           <span class="info-value">{{ userStore.user?.role === 'admin' ? '管理员' : '普通用户' }}</span>
         </div>
@@ -46,16 +52,78 @@
         </div>
       </div>
 
+      <!-- 邮箱绑定 -->
+      <div class="section">
+        <button class="toggle-btn" @click="showEmailForm = !showEmailForm">
+          <el-icon :size="14"><Message /></el-icon>
+          {{ userStore.user?.email ? '更换邮箱' : '绑定邮箱' }}
+          <el-icon :size="12" class="arrow" :class="{ expanded: showEmailForm }"><ArrowDown /></el-icon>
+        </button>
+
+        <div v-if="showEmailForm" class="form-area">
+          <div class="field">
+            <label>邮箱地址</label>
+            <div class="input-row">
+              <input
+                type="email"
+                v-model="emailForm.email"
+                placeholder="请输入邮箱地址"
+              />
+              <button
+                class="send-code-btn"
+                :disabled="emailCooldown > 0 || !emailForm.email || sendingCode"
+                @click="handleSendCode"
+              >
+                {{ emailCooldown > 0 ? `${emailCooldown}s` : (sendingCode ? '发送中' : '发送验证码') }}
+              </button>
+            </div>
+          </div>
+          <div class="field">
+            <label>验证码</label>
+            <input
+              type="text"
+              v-model="emailForm.code"
+              placeholder="请输入6位验证码"
+              maxlength="6"
+              @keyup.enter="handleBindEmail"
+            />
+          </div>
+          <button
+            class="submit-btn"
+            :disabled="!emailForm.email || !emailForm.code || bindingEmail"
+            @click="handleBindEmail"
+          >
+            {{ bindingEmail ? '提交中...' : (userStore.user?.email ? '更换邮箱' : '绑定邮箱') }}
+          </button>
+          <button
+            v-if="userStore.user?.email && !showEmailForm"
+            class="unbind-btn"
+            @click="handleUnbindEmail"
+          >
+            解绑邮箱
+          </button>
+        </div>
+
+        <!-- 解绑按钮（折叠时显示） -->
+        <button
+          v-if="userStore.user?.email && !showEmailForm"
+          class="unbind-link"
+          @click="handleUnbindEmail"
+        >
+          解绑当前邮箱
+        </button>
+      </div>
+
       <!-- 修改密码 -->
-      <div class="password-section">
-        <button class="toggle-pwd-btn" @click="showPasswordForm = !showPasswordForm">
+      <div class="section">
+        <button class="toggle-btn" @click="showPasswordForm = !showPasswordForm">
           <el-icon :size="14"><Lock /></el-icon>
-          {{ showPasswordForm ? '收起' : '修改密码' }}
+          修改密码
           <el-icon :size="12" class="arrow" :class="{ expanded: showPasswordForm }"><ArrowDown /></el-icon>
         </button>
 
-        <div v-if="showPasswordForm" class="password-form">
-          <div class="pwd-field">
+        <div v-if="showPasswordForm" class="form-area">
+          <div class="field">
             <label>旧密码</label>
             <input
               type="password"
@@ -64,7 +132,7 @@
               @keyup.enter="handleChangePassword"
             />
           </div>
-          <div class="pwd-field">
+          <div class="field">
             <label>新密码</label>
             <input
               type="password"
@@ -74,7 +142,7 @@
             />
           </div>
           <button
-            class="pwd-submit-btn"
+            class="submit-btn"
             :disabled="pwdLoading || !pwdForm.old_password || !pwdForm.new_password"
             @click="handleChangePassword"
           >
@@ -94,10 +162,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Close, SwitchButton, Lock, ArrowDown } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Close, SwitchButton, Lock, ArrowDown, Message } from '@element-plus/icons-vue'
 import { useUserStore } from '../store/user'
 import { authApi } from '../api/auth'
 
@@ -118,22 +186,90 @@ const visible = computed({
   set: (val) => emit('update:modelValue', val)
 })
 
+// ===== 邮箱绑定 =====
+const showEmailForm = ref(false)
+const sendingCode = ref(false)
+const bindingEmail = ref(false)
+const emailCooldown = ref(0)
+let cooldownTimer = null
+
+const emailForm = reactive({
+  email: '',
+  code: ''
+})
+
+const handleSendCode = async () => {
+  if (!emailForm.email.trim()) return
+  sendingCode.value = true
+  try {
+    await authApi.sendEmailCode(emailForm.email.trim())
+    ElMessage.success('验证码已发送')
+    // 倒计时60秒
+    emailCooldown.value = 60
+    cooldownTimer = setInterval(() => {
+      emailCooldown.value--
+      if (emailCooldown.value <= 0) {
+        clearInterval(cooldownTimer)
+      }
+    }, 1000)
+  } catch (error) {
+    ElMessage.error(error.message || '发送失败')
+  } finally {
+    sendingCode.value = false
+  }
+}
+
+const handleBindEmail = async () => {
+  if (!emailForm.email.trim() || !emailForm.code.trim()) {
+    ElMessage.warning('请填写完整')
+    return
+  }
+  if (emailForm.code.length !== 6) {
+    ElMessage.warning('验证码为6位数字')
+    return
+  }
+
+  bindingEmail.value = true
+  try {
+    await authApi.bindEmail({
+      email: emailForm.email.trim(),
+      code: emailForm.code.trim()
+    })
+    ElMessage.success('邮箱绑定成功')
+    emailForm.email = ''
+    emailForm.code = ''
+    showEmailForm.value = false
+    // 刷新用户信息
+    await userStore.fetchUser()
+  } catch (error) {
+    ElMessage.error(error.message || '绑定失败')
+  } finally {
+    bindingEmail.value = false
+  }
+}
+
+const handleUnbindEmail = async () => {
+  try {
+    await ElMessageBox.confirm('确定要解绑邮箱吗？', '确认', {
+      confirmButtonText: '解绑',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await authApi.unbindEmail()
+    ElMessage.success('邮箱已解绑')
+    await userStore.fetchUser()
+  } catch {
+    // 取消或失败
+  }
+}
+
+// ===== 修改密码 =====
 const showPasswordForm = ref(false)
 const pwdLoading = ref(false)
 const pwdForm = reactive({
   old_password: '',
   new_password: ''
 })
-
-const formatDate = (dateStr) => {
-  if (!dateStr) return '-'
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  })
-}
 
 const handleChangePassword = async () => {
   if (!pwdForm.old_password || !pwdForm.new_password) {
@@ -165,12 +301,27 @@ const handleChangePassword = async () => {
   }
 }
 
+// ===== 通用 =====
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  })
+}
+
 const handleLogout = () => {
   visible.value = false
   userStore.logout()
   ElMessage.success('已退出登录')
   router.push('/login')
 }
+
+onUnmounted(() => {
+  if (cooldownTimer) clearInterval(cooldownTimer)
+})
 </script>
 
 <style scoped>
@@ -224,6 +375,8 @@ const handleLogout = () => {
 
 .user-info {
   padding: 0 28px;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .avatar-section {
@@ -295,12 +448,18 @@ const handleLogout = () => {
   font-weight: 500;
 }
 
-/* 修改密码区域 */
-.password-section {
+.info-value.muted {
+  color: #cbd5e1;
+  font-weight: 400;
+  font-style: italic;
+}
+
+/* 功能区段 */
+.section {
   padding: 8px 0 0;
 }
 
-.toggle-pwd-btn {
+.toggle-btn {
   width: 100%;
   display: flex;
   align-items: center;
@@ -315,7 +474,7 @@ const handleLogout = () => {
   transition: all 0.2s;
 }
 
-.toggle-pwd-btn:hover {
+.toggle-btn:hover {
   border-color: #6366f1;
   color: #6366f1;
   background: #fafafe;
@@ -330,14 +489,14 @@ const handleLogout = () => {
   transform: rotate(180deg);
 }
 
-.password-form {
+.form-area {
   padding: 12px 0 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.pwd-field label {
+.field label {
   display: block;
   font-size: 12px;
   font-weight: 500;
@@ -345,7 +504,7 @@ const handleLogout = () => {
   margin-bottom: 4px;
 }
 
-.pwd-field input {
+.field input {
   width: 100%;
   height: 36px;
   border: 1px solid #e2e8f0;
@@ -358,16 +517,52 @@ const handleLogout = () => {
   box-sizing: border-box;
 }
 
-.pwd-field input::placeholder {
+.field input::placeholder {
   color: #cbd5e1;
 }
 
-.pwd-field input:focus {
+.field input:focus {
   border-color: #6366f1;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
-.pwd-submit-btn {
+/* 邮箱输入行（input + 发送按钮） */
+.input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.send-code-btn {
+  flex-shrink: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid #6366f1;
+  background: transparent;
+  color: #6366f1;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.send-code-btn:hover:not(:disabled) {
+  background: #6366f1;
+  color: white;
+}
+
+.send-code-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.submit-btn {
   height: 36px;
   border-radius: 8px;
   border: none;
@@ -380,13 +575,29 @@ const handleLogout = () => {
   margin-top: 4px;
 }
 
-.pwd-submit-btn:hover:not(:disabled) {
+.submit-btn:hover:not(:disabled) {
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
-.pwd-submit-btn:disabled {
+.submit-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.unbind-link {
+  width: 100%;
+  text-align: center;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.unbind-link:hover {
+  color: #ef4444;
 }
 
 .modal-footer {

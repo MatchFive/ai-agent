@@ -45,7 +45,10 @@ export const authApi = {
   login: (credentials) => api.post('/auth/login', credentials),
   register: (data) => api.post('/auth/register', data),
   getMe: () => api.get('/auth/me'),
-  changePassword: (data) => api.put('/auth/password', data)
+  changePassword: (data) => api.put('/auth/password', data),
+  sendEmailCode: (email) => api.post('/auth/email/send-code', { email }),
+  bindEmail: (data) => api.post('/auth/email/bind', data),
+  unbindEmail: () => api.delete('/auth/email'),
 }
 
 export default api
