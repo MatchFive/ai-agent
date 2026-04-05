@@ -36,6 +36,14 @@ async def lifespan(app: FastAPI):
 
     # 关闭时
     logger.info("Shutting down AI-Agent API...")
+    # 关闭调度器（从工具实例缓存中获取已启动的实例）
+    try:
+        from tools.registry import _instance_cache
+        scheduler_cls_path = "tools.scheduler_tool.SchedulerTool"
+        if scheduler_cls_path in _instance_cache:
+            _instance_cache[scheduler_cls_path].shutdown(wait=False)
+    except Exception as e:
+        logger.warning(f"Scheduler shutdown error: {e}")
     await close_redis()
     await close_db()
 

@@ -43,12 +43,12 @@ class EmailTool:
         from_addr: Optional[str] = None,
         use_tls: Optional[bool] = None,
     ):
-        self.smtp_host = smtp_host or settings.email.smtp_host
-        self.smtp_port = smtp_port or settings.email.smtp_port
-        self.username = username or settings.email.username
-        self.password = password or settings.email.password
-        self.from_addr = from_addr or settings.email.from_addr or self.username
-        self.use_tls = use_tls if use_tls is not None else settings.email.use_tls
+        self.smtp_host = smtp_host or settings.email_smtp_host
+        self.smtp_port = smtp_port or settings.email_smtp_port
+        self.username = username or settings.email_username
+        self.password = password or settings.email_password
+        self.from_addr = from_addr or settings.email_from or self.username
+        self.use_tls = use_tls if use_tls is not None else settings.email_use_tls
 
     def _create_message(self, content: EmailContent) -> MIMEMultipart:
         """创建邮件消息"""
@@ -141,6 +141,12 @@ class EmailTool:
                 "error": str(e)
             }
 
+    async def send_async(self, content: EmailContent) -> dict:
+        """异步发送邮件"""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.send, content)
+
     @register_method_tool(
         name="send_email",
         description="发送邮件（支持HTML、附件、抄送）",
@@ -156,11 +162,16 @@ class EmailTool:
         },
         category="communication"
     )
-    async def send_async(self, content: EmailContent) -> dict:
-        """异步发送邮件（当前为同步包装）"""
-        import asyncio
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.send, content)
+    async def send_email_tool(
+        self,
+        to: Union[str, List[str]],
+        subject: str,
+        body: str,
+        html: bool = False,
+    ) -> dict:
+        """发送邮件工具入口（供LLM调用）"""
+        content = EmailContent(to=to, subject=subject, body=body, html=html)
+        return await self.send_async(content)
 
     # 便捷方法
     @register_method_tool(

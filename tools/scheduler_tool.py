@@ -71,12 +71,13 @@ class SchedulerTool:
 
     @register_method_tool(
         name="scheduler_add_cron",
-        description="添加cron定时任务",
+        description="添加cron定时任务（定时提醒/通知）",
         parameters={
             "type": "object",
             "properties": {
                 "job_id": {"type": "string", "description": "任务ID"},
-                "cron_expr": {"type": "string", "description": "cron表达式（5段）", "example": "0 9 * * *"}
+                "cron_expr": {"type": "string", "description": "cron表达式（5段）", "example": "0 9 * * *"},
+                "description": {"type": "string", "description": "任务描述（提醒内容）"}
             },
             "required": ["job_id", "cron_expr"]
         },
@@ -85,8 +86,8 @@ class SchedulerTool:
     def add_cron_job(
         self,
         job_id: str,
-        func: Callable,
         cron_expr: str,
+        description: str = "",
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -94,8 +95,8 @@ class SchedulerTool:
 
         Args:
             job_id: 任务ID
-            func: 任务函数
             cron_expr: cron表达式 (如 "0 9 * * *" 表示每天9点)
+            description: 任务描述（提醒内容）
             **kwargs: 额外参数
 
         Returns:
@@ -117,34 +118,39 @@ class SchedulerTool:
             timezone='Asia/Shanghai'
         )
 
+        def _job_callback():
+            logger.info(f"[定时任务触发] job_id={job_id}, 描述: {description}")
+
         job = scheduler.add_job(
-            func,
+            _job_callback,
             trigger=trigger,
             id=job_id,
             replace_existing=True,
             **kwargs
         )
 
-        self._job_callbacks[job_id] = func
+        self._job_callbacks[job_id] = _job_callback
         logger.info(f"Cron job '{job_id}' added: {cron_expr}")
 
         return {
             "job_id": job_id,
             "type": "cron",
             "expression": cron_expr,
+            "description": description,
             "next_run": str(job.next_run_time) if job.next_run_time else None
         }
 
     @register_method_tool(
         name="scheduler_add_interval",
-        description="添加间隔执行任务",
+        description="添加间隔执行任务（定时提醒/通知）",
         parameters={
             "type": "object",
             "properties": {
                 "job_id": {"type": "string", "description": "任务ID"},
                 "seconds": {"type": "integer", "description": "间隔秒数", "default": 0},
                 "minutes": {"type": "integer", "description": "间隔分钟", "default": 0},
-                "hours": {"type": "integer", "description": "间隔小时", "default": 0}
+                "hours": {"type": "integer", "description": "间隔小时", "default": 0},
+                "description": {"type": "string", "description": "任务描述（提醒内容）"}
             },
             "required": ["job_id"]
         },
@@ -153,10 +159,10 @@ class SchedulerTool:
     def add_interval_job(
         self,
         job_id: str,
-        func: Callable,
         seconds: int = 0,
         minutes: int = 0,
         hours: int = 0,
+        description: str = "",
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -164,10 +170,10 @@ class SchedulerTool:
 
         Args:
             job_id: 任务ID
-            func: 任务函数
             seconds: 秒
             minutes: 分钟
             hours: 小时
+            description: 任务描述（提醒内容）
             **kwargs: 额外参数
 
         Returns:
@@ -181,15 +187,18 @@ class SchedulerTool:
             hours=hours
         )
 
+        def _job_callback():
+            logger.info(f"[间隔任务触发] job_id={job_id}, 描述: {description}")
+
         job = scheduler.add_job(
-            func,
+            _job_callback,
             trigger=trigger,
             id=job_id,
             replace_existing=True,
             **kwargs
         )
 
-        self._job_callbacks[job_id] = func
+        self._job_callbacks[job_id] = _job_callback
         interval_str = f"{hours}h {minutes}m {seconds}s".strip()
         logger.info(f"Interval job '{job_id}' added: {interval_str}")
 
@@ -197,6 +206,7 @@ class SchedulerTool:
             "job_id": job_id,
             "type": "interval",
             "interval": {"hours": hours, "minutes": minutes, "seconds": seconds},
+            "description": description,
             "next_run": str(job.next_run_time) if job.next_run_time else None
         }
 

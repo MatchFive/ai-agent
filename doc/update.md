@@ -1,5 +1,23 @@
  # 更新日志
 
+## 2026-04-02: 邮件工具与定时器工具 Bug 修复
+
+### 实现方案
+逐一排查邮件工具（EmailTool）和定时器工具（SchedulerTool）的代码，发现 4 个导致功能无法正常使用的 Bug 并修复。
+
+### 变更内容
+
+#### 修改文件
+- `tools/email_tool.py` — 修复配置属性名（`settings.email.smtp_host` → `settings.email_smtp_host`）；`send_email` 工具从注册在 `send_async`（要求 `EmailContent` 对象）改为注册在新方法 `send_email_tool`（直接接收 `to/subject/body/html` 参数，内部构建 `EmailContent`）
+- `tools/scheduler_tool.py` — `add_cron_job` 和 `add_interval_job` 移除 `func: Callable` 必填参数，改为内部日志回调；新增 `description` 参数记录任务用途
+- `api/main.py` — lifespan shutdown 阶段从工具实例缓存中获取 SchedulerTool 实例并调用 `shutdown()`
+
+#### 修复的问题
+1. **邮件配置属性名不匹配（致命）** — `email_tool.py` 使用 `settings.email.smtp_host` 嵌套访问，但 `config.py` 定义的是扁平字段 `settings.email_smtp_host`，实例化时 `AttributeError`
+2. **send_email 工具参数不匹配（致命）** — 注册参数为独立字段 `to/subject/body/html`，但 `send_async` 方法要求 `content: EmailContent` 对象，LLM 调用时 `TypeError`
+3. **定时器 func 参数不可用（致命）** — `add_cron_job`/`add_interval_job` 要求 `func: Callable`，LLM 无法提供 Python 函数对象，调用时 `TypeError`
+4. **调度器未关闭** — 应用退出时未调用 `SchedulerTool.shutdown()`
+
 ## 2026-04-01: 经验知识库功能
 
 ### 实现方案
